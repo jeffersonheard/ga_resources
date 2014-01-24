@@ -1,0 +1,46 @@
+    <hr>
+    <div class="row">
+        <h4>Permissions for this page</h4>
+        <div class="col-md-6">
+            <div class="panel panel-info">
+                <div class="panel-heading">Groups that can view</div>
+                <div class="panel-body">
+                    <form action="/ga_resources/view-groups/{{ page.slug }}/" method="POST">
+                        {% csrf_token %}
+                        <input class='form-control' type="text" name="name" id="edit-groups-name" placeholder='Add group'/>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel panel-info">
+                <div class="panel-heading">Users who can view</div>
+                <div class="panel-body">
+                    <form action="/ga_resources/view-users/{{ page.slug }}/" method="POST">
+                        {% csrf_token %}
+                        <input class='form-control' type="text" name="name" id="edit-users-name" placeholder='Add user'/>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="panel panel-warning">
+                <div class="panel-heading">Groups that can edit</div>
+                <div class="panel-body">
+                    <form action="/ga_resources/edit-groups/{{ page.slug }}" method="POST">
+                        {% csrf_token %}
+                        <input class='form-control' type="text" name="name" id="edit-groups-name" placeholder='Add group'/>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel panel-warning">
+                <div class="panel-heading">Users who can edit</div>
+                <div class="panel-body">
+                    <form action="/ga_resources/edit-users/{{ page.slug }}" method="POST">
+                        {% csrf_token %}
+                        <input class='form-control' type="text" name="name" id="edit-users-name" placeholder='Add user'/>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>

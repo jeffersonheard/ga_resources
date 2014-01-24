@@ -1,19 +1,15 @@
-{% extends "pages/page_nosidebars.html" %}
+{% extends "pages/page.html" %}
 
 {% load mezzanine_tags geoanalytics_tags pages_tags %}
 {% set_page_permissions %}
 
 {% block main %}
     <div class="row">
-        {% page_menu 'pages/menus/datasets_menu.html' %}
-    </div>
-
-    <div class="row">
-        <div class="span6">
-            {% if page.catalogpage.siblings %}
+        <div class="col-md-6">
+            {% if viewable_siblings %}
                 <h2><a href="/{{ page.parent.slug }}">{{ page.parent.title }}</a></h2>
                 <ul class='nav nav-list'>
-                    {% for child in page.catalogpage.siblings %}
+                    {% for child in viewable_siblings %}
                         <li {% ifequal child page %}class='active'{% endifequal %}>
                             <a href="/{{ child.slug }}">{{ child.title }}</a>
                         </li>
@@ -22,11 +18,11 @@
             {% endif %}
         </div>
 
-        <div class="span6">
-            {% if page.children %}
+        <div class="col-md-6">
+            {% if viewable_children %}
                 <h2>{{ page.title }}</h2>
                 <ul class="nav nav-list">
-                    {% for child in page.children.all %}
+                    {% for child in viewable_children %}
                         <li>
 
                         {% ifequal child.status 2 %}
@@ -50,15 +46,17 @@
 
     <hr>
 
-    {% if perms.page.add %}
-        {% subpage_button %}
-    {% endif %}
 
-    <div class="btn-group">
+    <div class="btn-toolbar">
+        {% if perms.page.add %}
+            {% subpage_button %}
+        {% endif %}
 
-    {% if page.perms.delete %}
+        {% if page.perms.delete %}
         <a class="btn btn-danger" href="/ga_resources/deletepage?slug={{ page.slug }}"><i class="icon-trash"></i> Delete</a>
     {% endif %}
     </div>
+
+    {% include 'pages/includes/page_permissions_editor.html' %}
 
 {% endblock %}

@@ -29,9 +29,8 @@ def create_page(request):
 def delete_page(request):
     slug = request.GET['slug']
     p = Page.objects.get(slug=slug)
-    to = p.parent if p.parent else '/'
     p.delete()
-    return HttpResponseRedirect(to.get_absolute_url())
+    return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
 
 def download_file(request, *args, **kwargs):

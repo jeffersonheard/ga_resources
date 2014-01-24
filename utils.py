@@ -15,6 +15,11 @@ from osgeo import osr
 import re
 from tastypie.models import ApiKey
 
+def best_name(user):
+    if user.first_name:
+        return user.first_name + ' ' + user.last_name
+    else:
+        return user.username
 
 def json_or_jsonp(r, i, code=200):
     if not isinstance(i, basestring):
@@ -30,19 +35,31 @@ def json_or_jsonp(r, i, code=200):
 
 def get_data_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Datasets", in_menus=[5])
+
+    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
+                                                   public=False)
+
+    p = CatalogPage.ensure_page(best_name(user), "Datasets", in_menus=[5])
     return p
 
 
 def get_layer_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Layers", in_menus=[6])
+
+    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
+                                                   public=False)
+
+    p = CatalogPage.ensure_page(best_name(user), "Layers", in_menus=[6])
     return p
 
 
 def get_stylesheet_page_for_user(user):
     from ga_resources.models import CatalogPage
-    p = CatalogPage.ensure_page(user.username, "Stylesheets", in_menus=[7])
+
+    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
+                                                   public=False)
+
+    p = CatalogPage.ensure_page(best_name(user), "Stylesheets", in_menus=[7])
     return p
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):

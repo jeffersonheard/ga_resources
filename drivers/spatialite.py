@@ -181,7 +181,7 @@ class SpatialiteDriver(Driver):
 
         connection = self._connection()
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
-        self._srid = srid
+        self._srid = srid if srid else 3857
 
         dataframe = self.get_filename('dfx')
         if os.path.exists(dataframe):
@@ -317,6 +317,11 @@ class SpatialiteDriver(Driver):
         """
 
         dfx_path = self.get_filename('dfx')
+        if os.path.exists(dfx_path):
+            try:
+                self._df = pandas.read_pickle(dfx_path)
+            except:
+                os.unlink(self.get_filename('dfx'))
 
         if len(kwargs) != 0:
             cfg = self.resource.driver_config
@@ -417,9 +422,7 @@ class SpatialiteDriver(Driver):
         elif hasattr(self, '_df'):
             return self._df
 
-        elif os.path.exists(dfx_path):
-            self._df = pandas.read_pickle(dfx_path)
-            return self._df
+
         else:
             table, geometry_column = self._table(**kwargs)
 

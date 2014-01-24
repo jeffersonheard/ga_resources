@@ -358,6 +358,8 @@ def compile_mapfile(name, srs, stylesheets, *layers):
 
 
 LAYER_CACHE_PATH = os.path.join(s.MEDIA_ROOT, '.cache', '_cached_layers')
+if not os.path.exists(LAYER_CACHE_PATH):
+    sh.mkdir('-p', LAYER_CACHE_PATH)
 
 def cache_entry_name(layers, srs, styles, bgcolor=None, transparent=True, query=None):
     d = OrderedDict(layers=layers, srs=srs, styles=styles, bgcolor=bgcolor, transparent=transparent)
