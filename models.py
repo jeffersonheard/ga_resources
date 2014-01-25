@@ -14,10 +14,22 @@ import datetime
 from django.utils.timezone import utc
 from logging import getLogger
 import json
-from .utils import get_user
 
 _log = getLogger('ga_resources')
 
+def get_user(request):
+    """authorize user based on API key if it was passed, otherwise just use the request's user.
+
+    :param request:
+    :return: django.contrib.auth.User
+    """
+    if 'api_key' in request.REQUEST:
+        api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
+        return api_key.user
+    elif request.user.is_authenticated():
+        return User.objects.get(pk=request.user.pk)
+    else:
+        return request.user
 
 class PagePermissionsMixin(object):
     def storage_key(self, kfor):
