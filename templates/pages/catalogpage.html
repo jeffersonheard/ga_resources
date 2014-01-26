@@ -1,9 +1,11 @@
 {% extends "pages/page.html" %}
 
 {% load mezzanine_tags geoanalytics_tags pages_tags %}
-{% set_page_permissions %}
 
 {% block main %}
+    {% set_ppm_permissions page %}
+    {% ga_editable_loader %}
+
     <div class="row">
         <div class="col-md-6">
             {% if viewable_siblings %}
@@ -48,7 +50,7 @@
 
 
     <div class="btn-toolbar">
-        {% if perms.page.add %}
+        {% if page.perms.add %}
             {% subpage_button %}
         {% endif %}
 

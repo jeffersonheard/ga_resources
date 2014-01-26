@@ -90,23 +90,27 @@ class PagePermissionsMixin(object):
     def can_change(self, request):
         user = get_user(request)
 
+        ret = True
+
         if user.is_authenticated():
             if not self.owner:
-                return user.is_superuser
+                ret = user.is_superuser
             elif user.pk == self.owner.pk:
-                return True
+                ret = True
             else:
                 users = self.edit_users
                 groups = self.edit_groups
 
                 if len(users) > 0 and user.pk in users:
-                    return True
+                    ret = True
                 elif len(groups) > 0:
-                    return user.groups.filter(pk__in=groups).exists()
+                    ret = user.groups.filter(pk__in=groups).exists()
                 else:
-                    return False
+                    ret =  False
         else:
-            return False
+            ret = False
+
+        return ret
 
 
     def can_view(self, request):
@@ -164,7 +168,8 @@ class PagePermissionsMixin(object):
 
 
     def copy_permissions_from_parent(self, clear_existing=True):
-        if isinstance(self.parent, PagePermissionsMixin):
+        parent = self.parent.get_content_model()
+        if isinstance(parent, PagePermissionsMixin):
             if clear_existing:
                 for u in self.edit_users:
                     self.remove_edit_user(u)
@@ -256,7 +261,7 @@ def catalog_page_processor(request, page):
         "viewable_siblings" : viewable_siblings,
     }
 
-post_save.connect(CatalogPage, set_permissions_for_new_catalog_page, weak=False)
+set_permissions = post_save.connect(set_permissions_for_new_catalog_page, sender=CatalogPage, weak=False)
 
 
 class DataResource(Page, RichText, PagePermissionsMixin):
@@ -397,8 +402,6 @@ class Style(Page, PagePermissionsMixin):
     owner = models.ForeignKey(User, null=True)
 
     def modified(self):
-        print "purging cache for {slug}".format(slug=self.slug)
-
         if s.WMS_CACHE_DB.exists(self.slug):
             cached_filenames = s.WMS_CACHE_DB.smembers(self.slug)
             for filename in cached_filenames:

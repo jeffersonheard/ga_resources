@@ -1,20 +1,23 @@
 {% extends "pages/page.html" %}
 
 {% load mezzanine_tags pages_tags %}
-{% set_page_permissions %}
 
 {% block main %}{{ block.super }}
-    {% editable page.title %}
-        <h1 xmlns="http://www.w3.org/1999/html">{{ page.title }}</h1>
-    {% endeditable %}
+    {% set_ppm_permissions page %}
+    {% ga_editable_loader %}
 
-    {% editable page.style.legend %}
+
+    {% ga_editable page.title %}
+        <h1 xmlns="http://www.w3.org/1999/html">{{ page.title }}</h1>
+    {% endga_editable %}
+
+    {% ga_editable page.style.legend %}
         {% if page.style.legend %}
             <img src="{{ page.style.legend.url }}" alt="legend">
         {% else %}
             <i>No legend. Please consider creating a legend graphic to be displayed with the map.</i>
         {% endif %}
-    {% endeditable %}
+    {% endga_editable %}
 
     <h3>Cascadenik stylesheet</h3>
 
@@ -25,9 +28,9 @@
     </p>
 
     <pre>
-    {% editable page.style.stylesheet %}
+    {% ga_editable page.style.stylesheet %}
         {{ page.style.stylesheet|safe }}
-    {% endeditable %}
+    {% endga_editable %}
     </pre>
 
 

@@ -1,9 +1,11 @@
 {% extends "pages/page.html" %}
 
-{% load mezzanine_tags pages_tags %}
-{% set_page_permissions %}
+{% load mezzanine_tags pages_tags geoanalytics_tags %}
 
 {% block main %}{{ block.super }}
+    {% set_ppm_permissions page %}
+    {% ga_editable_loader %}
+
     <div class='simple-map' id="map" style='width: 100%; height:400px'></div>
     <h6><a href="{{ page.renderedlayer.data_resource.get_absolute_url }}">Link to original data and web-services.</a></h6>
     {% if page.renderedlayer.default_style.legend %}
@@ -11,18 +13,18 @@
     {% endif %}
 
     <h4>Description</h4>
-    {% editable page.renderedlayer.content %}
+    {% ga_editable page.renderedlayer.content %}
         {{ page.renderedlayer.content|richtext_filter|safe }}
-    {% endeditable %}
+    {% endga_editable %}
 
     <div class="row-fluid" id="info-panel" style="max-width: 100%; padding: 30px; overflow-x:auto;">
     
     </div>
 
     <h4>Available Styles</h4>
-    {% editable page.renderedlayer.default_style %}
+    {% ga_editable page.renderedlayer.default_style %}
     <p><b>Default: </b><a href="{{ page.renderedlayer.get_absolute_url }}">{{ page.renderedlayer.default_style.title}}</a></p>
-    {% endeditable %}
+    {% endga_editable %}
 
     <div class="row">
 

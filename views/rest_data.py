@@ -194,8 +194,6 @@ def update_row(request, slug=None, ogc_fid=None, *args, **kwargs):
     except:
         pass # just in case there's JSON in the payuload
 
-    print json.dumps(row, indent=4)
-
     if ogc_fid is None:
         ogc_fid = row['OGC_FID']
 

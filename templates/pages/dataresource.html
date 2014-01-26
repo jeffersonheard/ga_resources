@@ -1,12 +1,15 @@
 {% extends "pages/page.html" %}
 
-{% load mezzanine_tags pages_tags %}
-{% set_page_permissions %}
+{% load mezzanine_tags pages_tags geoanalytics_tags %}
+
 
 {% block main %}{{ block.super }}
-    {% editable page.dataresource.content %}
+    {% set_ppm_permissions page %}  
+    {% ga_editable_loader %}
+    
+    {% ga_editable page.dataresource.content %}
         {{ page.dataresource.content|richtext_filter|safe }}
-    {% endeditable %}
+    {% endga_editable %}
 
     <div class="alert">
         <button type="button" class="close" data-dismiss="alert">&times;</button>
