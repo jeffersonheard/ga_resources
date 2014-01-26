@@ -5,16 +5,13 @@ from django.template import Node
 from django.core.exceptions import ImproperlyConfigured
 from lxml import etree
 from mezzanine.conf import settings
-import importlib
-from collections import namedtuple
-from django.template import Context, TemplateSyntaxError, Variable
+from django.template import Context
 from django.template.loader import get_template
 from django.utils.translation import ugettext_lazy as _
 
 # _page_mapping = importlib.import_module(settings.SUBPAGE_MAPPING_MODULE)
 from mezzanine.core.fields import RichTextField
 from mezzanine.core.forms import get_edit_form
-from mezzanine.utils.sites import has_site_permission
 
 
 def is_editable(obj, request):
@@ -31,6 +28,9 @@ def is_editable(obj, request):
 #    else:
 #        perm = obj._meta.app_label + "." + obj._meta.get_change_permission()
 #        return obj.can_change(request)
+
+
+
 
 
 _pages = {
@@ -200,6 +200,6 @@ def ga_editable(parsed, context, token):
             field_names = ",".join([f[1] for f in fields])
             context["editable_form"] = get_edit_form(obj, field_names)
             context["original"] = parsed
-            t = get_template("includes/editable_form.html")
+            t = get_template("includes/ga_editable_form.html")
             return t.render(Context(context))
     return parsed

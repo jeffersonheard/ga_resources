@@ -1,4 +1,3 @@
-from copy import deepcopy
 from mezzanine.pages.admin import PageAdmin
 from django.contrib.gis import admin
 from ga_resources.models import *

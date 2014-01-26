@@ -1,4 +1,6 @@
 from tempfile import NamedTemporaryFile
+import json
+
 from django.contrib.gis.geos import GEOSGeometry
 import pandas
 from django.http import HttpResponse
@@ -8,8 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import View
 from django.contrib.auth.models import User
 from ga_resources.drivers.spatialite import SpatialiteDriver
-from ga_resources.models import DataResource, CatalogPage
-import json
+from ga_resources.models import DataResource
 from mezzanine.pages.models import Page
 from tastypie.models import ApiKey
 from ga_resources import dispatch

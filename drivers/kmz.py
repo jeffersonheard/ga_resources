@@ -1,12 +1,13 @@
-import json
-from django.contrib.gis.geos import Polygon
-from lxml import etree, objectify
-from . import Driver
 from zipfile import ZipFile
+from cStringIO import StringIO
+
+from django.contrib.gis.geos import Polygon
+from lxml import etree
+from . import Driver
 from osgeo import osr
 import re
 from PIL import Image
-from cStringIO import StringIO
+
 
 class KmzDriver(Driver):
     @classmethod

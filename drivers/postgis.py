@@ -1,17 +1,19 @@
 # from ga_ows.views import wms, wfs
 from uuid import uuid4
+import json
+
 from django.conf import settings as s
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 import os
 from osgeo import osr
 from . import Driver
 from pandas import DataFrame
-from shapely import geometry, wkb
-import json
+from shapely import wkb
 from psycopg2 import connect
 from django.db import connection as django_db_connection
 from django.db import connections as django_db_connections
 import pandas
+
 
 def identity(x):
     return '"' + x + '"' if isinstance(x, basestring) else str(x)

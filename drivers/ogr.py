@@ -1,20 +1,18 @@
 # from ga_ows.views import wms, wfs
-import pandas
-from django.conf import settings as s
-from django.contrib.gis.geos import Polygon, GEOSGeometry
-from ga_resources.models import SpatialMetadata
-import os
-from osgeo.ogr import Geometry
-import sh
-from osgeo import osr, ogr
-from . import Driver, VECTOR
-from pandas import DataFrame
-from shapely import geometry, wkb
 import shutil
-from django.template.defaultfilters import slugify
-import re
 import json
 from zipfile import ZipFile
+
+import pandas
+from django.contrib.gis.geos import Polygon
+from ga_resources.models import SpatialMetadata
+import os
+from osgeo import osr, ogr
+from . import Driver
+from pandas import DataFrame
+from shapely import wkb
+from django.template.defaultfilters import slugify
+import re
 
 
 def ogrfield(elt):

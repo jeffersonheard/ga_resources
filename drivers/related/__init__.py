@@ -1,10 +1,11 @@
+from uuid import uuid4
+import shutil
+
 from django.core.files import File
 from pandas import merge, Series
 from ga_resources import models
-from uuid import uuid4
 import sh
 import os
-import shutil
 
 
 class Driver(object):

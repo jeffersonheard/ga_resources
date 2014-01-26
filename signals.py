@@ -1,6 +1,7 @@
+import datetime
+
 from django.db.models.signals import post_save, pre_delete, pre_save
 from django.conf import settings as s
-import datetime
 from django.utils.timezone import utc
 from . import tasks, dispatch, drivers
 from .models import DataResource, Style, RenderedLayer

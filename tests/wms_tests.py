@@ -1,4 +1,4 @@
-from unittest import TestCase, skip
+from unittest import TestCase
 import requests
 from lxml import etree
 from PIL import Image

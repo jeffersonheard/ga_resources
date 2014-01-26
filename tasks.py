@@ -1,8 +1,9 @@
+import datetime
+
 from celery import group
 from celery.task import periodic_task, task
 from celery.schedules import crontab
 from .models import DataResource
-import datetime
 from django.utils.timezone import utc
 
 

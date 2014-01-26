@@ -1,5 +1,3 @@
-import requests
-import json
 from django.conf import settings
 
 class ResourceCache(object):

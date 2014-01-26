@@ -1,5 +1,5 @@
 from tastypie.api import Api
-from tastypie.fields import ForeignKey, ManyToManyField, OneToOneField
+from tastypie.fields import ForeignKey, ManyToManyField
 from tastypie.resources import ModelResource, ALL, ALL_WITH_RELATIONS
 from tastypie.authentication import SessionAuthentication
 from tastypie.authorization import Authorization

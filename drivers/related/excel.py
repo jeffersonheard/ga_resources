@@ -1,6 +1,6 @@
 __author__ = 'th'
 from . import Driver
-from pandas import DataFrame, ExcelFile
+from pandas import ExcelFile
 
 
 class ExcelDriver(Driver):

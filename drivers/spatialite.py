@@ -2,6 +2,8 @@
 from tarfile import TarFile
 from uuid import uuid4
 from zipfile import ZipFile
+import json
+
 from django.contrib.gis.geos import Polygon, GEOSGeometry
 from django.core.files import File
 import numpy
@@ -11,11 +13,11 @@ from . import Driver
 from pandas import DataFrame
 import sh
 from shapely import geometry, wkb
-import json
 import pandas
 from pysqlite2 import dbapi2 as db
 import geojson
 import shapely
+
 
 def identity(x):
     return '"' + x + '"' if isinstance(x, basestring) else str(x)

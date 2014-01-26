@@ -15,7 +15,7 @@
 # url(r'^(?P<slug>[a-z0-9\-/]+)/', views.CRUDView.as_view()),
 import json
 
-from unittest import TestCase, skip
+from unittest import TestCase
 import requests
 
 AK = '1c6a41ed6a5bc199d10e9594090b17cb83213dbb' # API_KEY

@@ -1,12 +1,12 @@
+from unittest import TestCase
+
 from . import utils
-import shutil
-from ga_resources import signals
-from unittest import TestCase, skip
 from ga_resources.drivers.spatialite import SpatialiteDriver
 from ga_resources.models import DataResource
 from osgeo import osr
 import pandas
 from shapely.wkt import geom_from_wkt
+
 
 #@skip
 class SpatialiteTest(TestCase):

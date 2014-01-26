@@ -1,11 +1,9 @@
 from django.contrib.gis.geos import Polygon
 import os
 from osgeo import osr, gdal
-from . import Driver, VECTOR, RASTER
-import time
+from . import Driver, RASTER
 from pandas import DataFrame, Panel
-from django.template.defaultfilters import slugify
-import re
+
 
 class GeotiffDriver(Driver):
     @classmethod

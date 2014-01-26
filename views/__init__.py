@@ -1,15 +1,22 @@
-import importlib
 import json
+
+from django.contrib import admin
+from django.contrib.admin import ModelAdmin
+from django.contrib.auth.models import Group
+import importlib
 from django.contrib.gis.geos import Polygon, GEOSGeometry
+from django.db.models import get_model
 from django.http import HttpResponseRedirect, HttpResponse, HttpResponseNotFound
 from django.shortcuts import get_object_or_404
 from ga_resources.models import DataResource
+from mezzanine.core.forms import get_edit_form
 from mezzanine.pages.models import Page
 from mezzanine.utils.urls import admin_url
-
 from .kmz import *
 from .ows import *
 from .rest_data import *
+from th_core.views import to_referrer
+
 
 def create_page(request):
     models = request.GET['module']
@@ -97,3 +104,134 @@ def search_catalog(request, *args, **kwargs):
         return HttpResponse(callback + '(' + json.dumps(ret) + ")", mimetype='text/plain')
     else:
         return HttpResponse(json.dumps(ret), mimetype='application/json')
+
+def view_groups(request, *args, **kwargs):
+    """View, add, or delete view groups
+    :param request:  
+    :param args: 
+    :param kwargs: 
+    :return:
+    """
+    page = Page.objects.get(slug=kwargs['slug']).get_content_model()
+    
+    if request.method == 'POST':
+        try:
+            page.add_view_group(Group.objects.get(name=request.POST['name']))
+        except:
+            pass
+        return to_referrer(request)
+    elif request.method == 'DELETE':
+        try:
+            grp = int(kwargs['group'])
+            page.remove_view_group(Group.objects.get(pk=grp))
+        except:
+            grp = kwargs['group']
+            page.remove_view_group(Group.objects.get(name=grp))
+        return to_referrer(request)
+
+    return json_or_jsonp(request, list(page.view_groups), 200)
+
+def view_users(request, *args, **kwargs):
+    """View, add, or delete view users
+    :param request:  
+    :param args: 
+    :param kwargs: 
+    :return:
+    """
+
+    page = Page.objects.get(slug=kwargs['slug']).get_content_model()
+    
+    if request.method == 'POST':
+        try:
+            page.add_view_user(User.objects.get(email=request.POST['name']))
+        except:
+            pass
+
+        return to_referrer(request)
+    elif request.method == 'DELETE':
+        try:
+            grp = int(kwargs['user'])
+            page.remove_view_user(grp)
+            print "removed user {u} from page {p}".format(u=grp, p=page.pk)
+        except:
+            grp = kwargs['user']
+            page.remove_view_user(User.objects.get(email=grp))
+        return to_referrer(request)
+
+    return json_or_jsonp(request, list(page.view_users.union({page.owner.pk} if page.owner else set())), 200)
+
+def edit_groups(request, *args, **kwargs):
+    """View, add, or delete edit groups
+    :param request:  
+    :param args: 
+    :param kwargs: 
+    :return:
+    """
+    page = Page.objects.get(slug=kwargs['slug']).get_content_model()
+    
+    if request.method == 'POST':
+        try:
+            page.add_edit_group(Group.objects.get(name=request.POST['name']))
+        except:
+            pass
+        return to_referrer(request)
+    elif request.method == 'DELETE':
+        try:
+            grp = int(kwargs['group'])
+            page.remove_edit_group(Group.objects.get(pk=grp))
+        except:
+            grp = kwargs['group']
+            page.remove_edit_group(Group.objects.get(name=grp))
+        return to_referrer(request)
+
+    return json_or_jsonp(request, list(page.edit_groups), 200)
+
+def edit_users(request, *args, **kwargs):
+    """View, add, or delete edit users
+    :param request:  
+    :param args: 
+    :param kwargs: 
+    :return:
+    """
+
+    print kwargs
+    page = Page.objects.get(slug=kwargs['slug']).get_content_model()
+    
+    if request.method == 'POST':
+        try:
+            page.add_edit_user(User.objects.get(email=request.POST['name']))
+        except:
+            pass # invalid email address - need to handle better
+
+        return to_referrer(request)
+    elif request.method == 'DELETE':
+        try:
+            grp = int(kwargs['user'])
+            page.remove_edit_user(User.objects.get(pk=grp))
+        except:
+            grp = kwargs['user']
+            page.remove_edit_user(User.objects.get(username=grp))
+        return to_referrer(request)
+
+    return json_or_jsonp(request, list(page.edit_users.union({page.owner.pk} if page.owner else set())), 200)
+
+
+def edit(request):
+    """
+    Process the inline editing form.
+    """
+    model = get_model(request.POST["app"], request.POST["model"])
+    obj = model.objects.get(id=request.POST["id"])
+    form = get_edit_form(obj, request.POST["fields"], data=request.POST,
+                         files=request.FILES)
+
+    authorize(request, obj)
+    if form.is_valid():
+        form.save()
+        model_admin = ModelAdmin(model, admin.site)
+        message = model_admin.construct_change_message(request, form, None)
+        model_admin.log_change(request, obj, message)
+        response = ""
+    else:
+        response = list(form.errors.values())[0][0]
+    return HttpResponse(response)

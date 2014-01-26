@@ -1,23 +1,24 @@
 import json
 import cPickle
 import shutil
-from django.utils.timezone import utc
 from collections import OrderedDict
 from hashlib import md5
+from datetime import datetime
+from urllib2 import urlopen
+import time
+import math
+from sqlite3 import dbapi2 as db
+
+from django.utils.timezone import utc
 from ga_resources import models as m, dispatch
 from ga_resources.models import DataResource
 import os
 from django.conf import settings as s
 import sh
-from datetime import datetime
-from urllib2 import urlopen
 import requests
 import re
 from django.conf import settings
 from ga_resources import predicates
-import time
-import math
-from sqlite3 import dbapi2 as db
 
 
 try:
@@ -662,7 +663,6 @@ class CacheManager(object):
 
 
     def remove_caches_for_resource(self, resource):
-        from ga_resources.models import RenderedLayer, DataResource
         """Iterate over all caches using a particular resource and burn them"""
         for layer in m.RenderedLayer.objects.filter(data_resource__slug = resource):
             self.remove_caches_for_layer(layer.slug)

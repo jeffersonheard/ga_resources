@@ -1,23 +1,26 @@
-from django.contrib.auth.models import User
+import datetime
+from logging import getLogger
+import json
+
+from django.contrib.auth.models import User, Group
 from django.db.models.signals import post_save
+from django.contrib.gis.db import models
+from django.utils.timezone import utc
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
-from django.contrib.gis.db import models
-from django.conf import settings as s
-import importlib
+from mezzanine.conf import settings as s
 from mezzanine.pages.page_processors import processor_for
 from timedelta.fields import TimedeltaField
 import sh
 import os
 from osgeo import osr
-import datetime
-from django.utils.timezone import utc
-from logging import getLogger
-import json
+import importlib
+
 
 _log = getLogger('ga_resources')
 
 def get_user(request):
+    from tastypie.models import ApiKey
     """authorize user based on API key if it was passed, otherwise just use the request's user.
 
     :param request:
@@ -206,6 +209,23 @@ class PagePermissionsMixin(object):
             self.save()
 
 
+# this should be used as the page processor for anything with pagepermissionsmixin
+# page_processor_for(MyPage)(ga_resources.views.page_permissions_page_processor)
+def page_permissions_page_processor(request, page):
+    page = page.get_content_model()
+    edit_groups = Group.objects.filter(pk__in=page.edit_groups)
+    view_groups = Group.objects.filter(pk__in=page.view_groups)
+    edit_users = User.objects.filter(pk__in=page.edit_users)
+    view_users = User.objects.filter(pk__in=page.view_users)
+
+    return {
+        "edit_groups": edit_groups,
+        "view_groups": view_groups,
+        "edit_users": edit_users,
+        "view_users": view_users,
+    }
+
+
 class CatalogPage(Page, PagePermissionsMixin):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
 
@@ -268,10 +288,11 @@ def catalog_page_processor(request, page):
             if not hasattr(page, 'can_view') or page.can_view(request):
                 viewable_siblings.append(child)
 
-    return {
-        "viewable_children" : viewable_children,
-        "viewable_siblings" : viewable_siblings,
-    }
+    ctx = page_permissions_page_processor(request, page)
+    ctx['viewable_children'] = viewable_children
+    ctx['viewable_siblings'] = viewable_siblings
+
+    return ctx
 
 set_permissions = post_save.connect(set_permissions_for_new_catalog_page, sender=CatalogPage, weak=False)
 

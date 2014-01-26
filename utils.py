@@ -13,7 +13,6 @@ from django.utils.formats import sanitize_separators
 from mezzanine.pages.models import Page
 from osgeo import osr
 import re
-from tastypie.models import ApiKey
 
 def best_name(user):
     if user.first_name:
@@ -101,6 +100,7 @@ def get_user(request):
     :param request:
     :return: django.contrib.auth.User
     """
+    from tastypie.models import ApiKey
     if 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user
