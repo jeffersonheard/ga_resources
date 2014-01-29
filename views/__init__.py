@@ -42,7 +42,7 @@ def delete_page(request):
     if slug in request.META['HTTP_REFERER']:
        if parent == None:
           return HttpResponseRedirect('/')
-       return HttpResponseRedirect(parent.slug)
+       return HttpResponseRedirect('/' + parent.slug)
     return to_referrer(request)
 
 
