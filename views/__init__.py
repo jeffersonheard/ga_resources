@@ -36,8 +36,13 @@ def create_page(request):
 def delete_page(request):
     slug = request.GET['slug']
     p = Page.objects.get(slug=slug)
+    parent = p.parent
     p.delete()
-    return HttpResponseRedirect(request.META['HTTP_REFERER'])
+    if slug in request.META['HTTP_REFERER']:
+       if parent == None:
+          return HttpResponseRedirect('/')
+       return HttpResponseRedirect(parent.slug)
+    return to_referrer(request)
 
 
 def download_file(request, *args, **kwargs):
