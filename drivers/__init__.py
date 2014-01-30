@@ -340,7 +340,6 @@ def compile_mml(srs, styles, *layers):
     """Take multiple layers and stylesheets and turn it into a Mapnik input file"""
     stylesheets = [m.Style.objects.get(slug=s.split('.')[0]) for s in styles]
     css_classes = set([s.split('.')[1] if '.' in s else 'default' for s in styles])
-
     mml = {
         'srs' : srs,
         'Stylesheet' : [{ "id" : re.sub('/', '_', stylesheet.slug), "data" : stylesheet.stylesheet} for stylesheet in stylesheets],
@@ -459,7 +458,7 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
     while os.path.exists(name + ".lock"):
         time.sleep(0.05)
     m = mapnik.Map(width, height)
-    mapnik.load_map(m, name + '.xml')
+    mapnik.load_map(m, (name + '.xml').encode('ascii'))
     m.zoom_to_box(mapnik.Box2d(*bbox))
     mapnik.render_to_file(m, filename, fmt)
 
@@ -552,6 +551,7 @@ class CacheManager(object):
             transparent=kwargs.get('transparent', True),
             query=kwargs.get('query', None)
         )
+
         c = self.conn.cursor()
         c.execute("INSERT OR REPLACE INTO caches (name, kind) VALUES (:name, :kind)", { "name" : name, "kind" : "tile" })
         for layer in layers:
@@ -677,9 +677,9 @@ class MBTileCache(object):
             query=kwargs.get('query', None)
         )
         self.cachename = self.name + '.mbtiles'
-
         self.layers = layers if not isinstance(layers, basestring) else [layers]
         self.styles = styles if not isinstance(styles, basestring) else [styles]
+
         self.kwargs = kwargs
         e4326 = osr.SpatialReference()
         e3857 = osr.SpatialReference()
@@ -816,7 +816,6 @@ class MBTileCache(object):
         for zoom in range(min_zoom, max_zoom+1):
             a1, b1 = deg2num(y1, x1, zoom)
             a2, b2 = deg2num(y2, x2, zoom)
-            print 'deleting tiles from {a1},{b1} - {a2},{b2} for {zoom}'.format(**locals())
             c.execute(del_tile_data, [a1, b1, a2, b2, zoom])
             c.execute(del_map_entry, [a1, b1, a2, b2, zoom])
 

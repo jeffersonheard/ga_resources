@@ -49,19 +49,19 @@ class PagePermissionsMixin(object):
 
     @property
     def edit_users(self):
-        return set(self.permissions_store.smembers(self.storage_key('edit-users')))
+        return set(int(x) for x in self.permissions_store.smembers(self.storage_key('edit-users')))
 
     @property
     def edit_groups(self):
-        return set(self.permissions_store.smembers(self.storage_key('edit-groups')))
+        return set(int(x) for x in self.permissions_store.smembers(self.storage_key('edit-groups')))
 
     @property
     def view_users(self):
-        return set(self.permissions_store.smembers(self.storage_key('view-users')))
+        return set(int(x) for x in self.permissions_store.smembers(self.storage_key('view-users')))
 
     @property
     def view_groups(self):
-        return set(self.permissions_store.smembers(self.storage_key('view-groups')))
+        return set(int(x) for x in self.permissions_store.smembers(self.storage_key('view-groups')))
 
 
     def add_edit_user(self, user):
@@ -156,22 +156,22 @@ class PagePermissionsMixin(object):
         for child in self.children:
             if isinstance(child, PagePermissionsMixin):
                 if clear_existing:
-                    for u in child.edit_users:
+                    for u in (int(x) for x in child.edit_users):
                         child.remove_edit_user(u)
-                    for u in child.view_users:
+                    for u in (int(x) for x in child.view_users):
                         child.remove_view_user(u)
-                    for g in child.edit_groups:
+                    for g in (int(x) for x in child.edit_groups):
                         child.remove_edit_group(g)
-                    for g in child.view_groups:
+                    for g in (int(x) for x in child.view_groups):
                         child.remove_view_group(g)
 
-                for u in self.edit_users:
+                for u in (int(x) for x in self.edit_users):
                     child.add_edit_user(u)
-                for u in self.view_users:
+                for u in (int(x) for x in self.view_users):
                     child.add_view_user(u)
-                for g in self.edit_groups:
+                for g in (int(x) for x in self.edit_groups):
                     child.add_edit_group(g)
-                for g in self.view_groups:
+                for g in (int(x) for x in self.view_groups):
                     child.add_view_group(g)
 
                 child.public = self.public
@@ -186,22 +186,22 @@ class PagePermissionsMixin(object):
         parent = self.parent.get_content_model()
         if isinstance(parent, PagePermissionsMixin):
             if clear_existing:
-                for u in self.edit_users:
+                for u in (int(x) for x in self.edit_users):
                     self.remove_edit_user(u)
-                for u in self.view_users:
+                for u in (int(x) for x in self.view_users):
                     self.remove_view_user(u)
-                for g in self.edit_groups:
+                for g in (int(x) for x in self.edit_groups):
                     self.remove_edit_group(g)
-                for g in self.view_groups:
+                for g in (int(x) for x in self.view_groups):
                     self.remove_view_group(g)
 
-            for u in self.parent.edit_users:
+            for u in (int(x) for x in self.parent.edit_users):
                 self.add_edit_user(u)
-            for u in self.parent.view_users:
+            for u in (int(x) for x in self.parent.view_users):
                 self.add_view_user(u)
-            for g in self.parent.edit_groups:
+            for g in (int(x) for x in self.parent.edit_groups):
                 self.add_edit_group(g)
-            for g in self.parent.view_groups:
+            for g in (int(x) for x in self.parent.view_groups):
                 self.add_view_group(g)
 
             self.public = self.parent.public

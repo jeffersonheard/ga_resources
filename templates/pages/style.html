@@ -1,6 +1,6 @@
 {% extends "pages/page.html" %}
 
-{% load mezzanine_tags pages_tags %}
+{% load mezzanine_tags pages_tags geoanalytics_tags %}
 
 {% block main %}{{ block.super }}
     {% set_ppm_permissions page %}
@@ -19,10 +19,10 @@
         {% endif %}
     {% endga_editable %}
 
-    <h3>Cascadenik stylesheet</h3>
+    <h3>CartoCSS stylesheet</h3>
 
-    <p>Casecadenik is a CSS-style stylesheet for maps.
-        <a target="_blank" href="https://github.com/mapnik/Cascadenik/wiki/Cascadenik">
+    <p>CartoCSS is a CSS-style stylesheet language for maps.
+        <a target="_blank" href="https://github.com/mapnik/carto/">
             Please see the wiki on Cascadenik for current documentation
         </a>
     </p>

@@ -32,7 +32,7 @@ def purge_cache_on_delete(sender, instance, *args, **kwargs):
         for layer in instance.renderedlayer_set.all():
             layer.resource.clear_cache()
     elif sender is RenderedLayer:
-        layer.resource.clear_cache()
+        sender.resource.clear_cache()
 
 
 def purge_resource_data(sender, instance, *args, **kwargs):

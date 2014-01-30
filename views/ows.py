@@ -247,7 +247,7 @@ def tms(request, layer, z, x, y, **kwargs):
 
     user = authorize(request, page=layer, view=True)
     dispatch.api_accessed.send(RenderedLayer, instance=layer_instance, user=user)
-    style = request.GET.get('styles', layer_instance.default_style.slug)
+    style = request.GET.get('style', layer_instance.default_style.slug)
     tms = CacheManager.get().get_tile_cache([layer], [style])
     return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')
 
