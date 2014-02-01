@@ -138,12 +138,19 @@ def create_dataset_with_parent_geometry(request, slug):
     dispatch.dataset_created.send(sender=ds, user=user)
     return json_or_jsonp(request, {'path': ds.slug}, code=201)
 
-
 def schema(request, slug=None, *args, **kwargs):
     s = get_object_or_404(DataResource, slug=slug)
     user = authorize(request, s, view=True)
 
     r = [{'name': n} for n in s.driver_instance.schema()]
+    dispatch.api_accessed.send(sender=DataResource, instance=s, user=user)
+    return json_or_jsonp(request, r)
+
+def full_schema(request, slug=None, *args, **kwargs):
+    s = get_object_or_404(DataResource, slug=slug)
+    user = authorize(request, s, view=True)
+
+    r = [{'name': n, 'kind' : t} for n, t in s.driver_instance.full_schema().items()]
     dispatch.api_accessed.send(sender=DataResource, instance=s, user=user)
     return json_or_jsonp(request, r)
 

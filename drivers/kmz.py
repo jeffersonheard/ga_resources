@@ -43,11 +43,10 @@ class KmzDriver(Driver):
 
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(4326)
-        self.resource.spatial_metadata.native_srs = srs.ExportToProj4()
-        self.resource.spatial_metadata.bounding_box = Polygon.from_bbox((-180, -90, 180, 90))
-        self.resource.spatial_metadata.native_bounding_box = Polygon.from_bbox((-180, -90, 180, 90))
-        self.resource.spatial_metadata.three_d = False
-        self.resource.spatial_metadata.save()
+        self.resource.native_srs = srs.ExportToProj4()
+        self.resource.bounding_box = Polygon.from_bbox((-180, -90, 180, 90))
+        self.resource.native_bounding_box = Polygon.from_bbox((-180, -90, 180, 90))
+        self.resource.three_d = False
         self.resource.save()
 
     def open_stream(self, filename):
