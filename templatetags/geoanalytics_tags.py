@@ -108,7 +108,6 @@ class SubpageNode(Node):
         else:
             return ""
 
-        print etree.tostring(div, pretty_print=True)
         return etree.tostring(div, pretty_print=True)
 
 
