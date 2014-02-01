@@ -888,5 +888,25 @@ class SpatialiteDriver(Driver):
         names = [c[0] for c in conn.cursor().execute('select * from {table} limit 1'.format(table=self._tablename)).description]
         return names
 
+    def full_schema(self):
+        self.ready_data_resource()
+        conn = self._connection()
+        human_names = {
+            'VARCHAR': 'Text',
+            'FLOAT': 'Real',
+            'POLYGON': 'Polygon',
+            'POINT': 'Point',
+            'LINESTRING': 'LineString',
+            'MULTIPOINT': 'MultiPoint',
+            'MULTIPOLYGON': 'MultiPolygon',
+            'MULTILINESTRING': 'MultiLineString',
+            'GEOMETRYCOLLECTION': 'GeometryCollection',
+        }
+
+        return dict(
+            [(name, human_names.get(typename, '*')) for
+                _, name, typename, _, _, _ in
+                conn.execute('pragma table_info({table})'.format(table=self._tablename)).fetchall()])
+
 driver = SpatialiteDriver
 

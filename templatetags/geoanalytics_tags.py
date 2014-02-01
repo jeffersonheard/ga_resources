@@ -1,5 +1,6 @@
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.db.models import Model
+from ga_resources.utils import best_name, get_user
 from mezzanine import template
 from mezzanine.pages.models import Page
 from django.template import Node
@@ -208,3 +209,9 @@ def ga_editable(parsed, context, token):
             t = get_template("includes/ga_editable_form.html")
             return t.render(Context(context))
     return parsed
+
+@register.filter
+def contact(user):
+    bn = best_name(user)
+    email = user.email
+    return '<a href="{email}">{bn}</a>'.format(**locals())

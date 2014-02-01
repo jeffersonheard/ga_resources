@@ -101,7 +101,9 @@ def get_user(request):
     :return: django.contrib.auth.User
     """
     from tastypie.models import ApiKey
-    if 'api_key' in request.REQUEST:
+    if isinstance(request, basestring):
+        return User.objects.get(username=request)
+    elif 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user
     elif request.user.is_authenticated():

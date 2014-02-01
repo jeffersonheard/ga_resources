@@ -32,6 +32,7 @@ urlpatterns = patterns('',
 
     url(r'^new/', views.create_dataset),
     url(r'^(?P<slug>[a-z0-9\-/]+)/schema/', views.schema),
+    url(r'^(?P<slug>[a-z0-9\-/]+)/full_schema/', views.full_schema),
     url(r'^(?P<slug>[a-z0-9\-/]+)/query/(?P<x1>[0-9\-.]+),(?P<y1>[0-9\-.]+),(?P<x2>[0-9\-.]+),(?P<y2>[0-9\-.]+)(?P<srid>;[0-9]+)?/',
         views.query),
     url(r'^(?P<slug>[a-z0-9\-/]+)/query/', views.query),
