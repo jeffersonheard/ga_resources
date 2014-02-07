@@ -11,14 +11,21 @@ from django.forms import MultipleChoiceField, Field
 from django.http import HttpResponse
 from django.utils.formats import sanitize_separators
 from mezzanine.pages.models import Page
+from .models import CatalogPage
 from osgeo import osr
 import re
 
 def best_name(user):
-    if user.first_name:
-        return user.first_name + ' ' + user.last_name
-    else:
-        return user.username
+    profile = user.get_profile()
+    if not profile.display_name:
+        if user.first_name:
+            profile.display_name = user.first_name + (' ' + user.last_name if user.last_name else '') + '(' + user.username + ')'
+            profile.save()
+        else:
+            profile.display_name = user.username
+            profile.save()
+    return profile.display_name
+
 
 def json_or_jsonp(r, i, code=200):
     if not isinstance(i, basestring):
@@ -31,34 +38,26 @@ def json_or_jsonp(r, i, code=200):
     else:
         return HttpResponse(i, mimetype='application/json', status=code)
 
+def user_page(user):
+    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[], public=False, parent=None)
+    if created:
+        user_page.title = best_name(user) # this is a hack to assure that the slug is correct
+        user_page.save()
+
+    return user_page
 
 def get_data_page_for_user(user):
-    from ga_resources.models import CatalogPage
-
-    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
-                                                   public=False)
-
-    p = CatalogPage.ensure_page(best_name(user), "Datasets", in_menus=[5])
+    p, _ = CatalogPage.objects.get_or_create(title="Datasets", in_menus=[], public=False, owner=user, parent=user_page(user))
     return p
 
 
 def get_layer_page_for_user(user):
-    from ga_resources.models import CatalogPage
-
-    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
-                                                   public=False)
-
-    p = CatalogPage.ensure_page(best_name(user), "Layers", in_menus=[6])
+    p, _ = CatalogPage.objects.get_or_create(title="Layers", in_menus=[], public=False, owner=user, parent=user_page(user))
     return p
 
 
 def get_stylesheet_page_for_user(user):
-    from ga_resources.models import CatalogPage
-
-    user_page, created = CatalogPage.objects.get_or_create(title=best_name(user), owner=user, in_menus=[5, 6, 7, 8],
-                                                   public=False)
-
-    p = CatalogPage.ensure_page(best_name(user), "Stylesheets", in_menus=[7])
+    p, _ = CatalogPage.objects.get_or_create(title="Stylesheets", in_menus=[], public=False, owner=user, parent=user_page(user))
     return p
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):

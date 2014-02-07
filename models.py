@@ -20,12 +20,12 @@ import importlib
 _log = getLogger('ga_resources')
 
 def get_user(request):
-    from tastypie.models import ApiKey
     """authorize user based on API key if it was passed, otherwise just use the request's user.
 
     :param request:
     :return: django.contrib.auth.User
     """
+    from tastypie.models import ApiKey
     if 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user
@@ -130,7 +130,6 @@ class PagePermissionsMixin(object):
 
     def can_view(self, request):
         user = get_user(request)
-
         if self.public or not self.owner:
             return True
         if user.is_authenticated():

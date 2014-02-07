@@ -10,8 +10,6 @@ from mezzanine.conf import settings
 from django.template import Context
 from django.template.loader import get_template
 from django.utils.translation import ugettext_lazy as _
-
-# _page_mapping = importlib.import_module(settings.SUBPAGE_MAPPING_MODULE)
 from mezzanine.core.fields import RichTextField
 from mezzanine.core.forms import get_edit_form
 

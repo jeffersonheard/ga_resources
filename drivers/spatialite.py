@@ -98,7 +98,7 @@ class SpatialiteDriver(Driver):
         super(SpatialiteDriver, self).compute_fields()
 
         if not hasattr(self, "src_ext") and self.resource.resource_file :
-            self.src_ext = self.resource.resource_file.split('.')[-1]
+            self.src_ext = self.resource.resource_file.name.split('.')[-1]
 
         # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
         # file
@@ -134,6 +134,8 @@ class SpatialiteDriver(Driver):
                 '-dsco', 'SPATIALITE=YES',
                 out_filename, in_filename
             )
+            self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
+
         elif self.src_ext.endswith('gz'):
             archive = TarFile(self.cached_basename + self.src_ext)
             projection_found = False
@@ -166,6 +168,8 @@ class SpatialiteDriver(Driver):
                 '-dsco', 'SPATIALITE=YES',
                 out_filename, in_filename
             )
+            self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
+
         elif not self.src_ext.endswith('sqlite'):
             in_filename = self.get_filename(self.src_ext)
             out_filename = self.get_filename('sqlite')
@@ -180,6 +184,7 @@ class SpatialiteDriver(Driver):
                 '-dsco', 'SPATIALITE=YES',
                 out_filename, in_filename
             )
+            self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
 
         connection = self._connection()
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry

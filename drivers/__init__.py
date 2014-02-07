@@ -76,10 +76,11 @@ class Driver(object):
             if self.resource.resource_file:
                 if os.path.exists(cached_filename):
                     os.unlink(cached_filename)
-                try:
+                if os.path.exists(self.resource.resource_file.name):
                     os.symlink(os.path.join(s.MEDIA_ROOT, self.resource.resource_file.name), cached_filename)
-                except:
-                    pass
+                else:
+                    with open(cached_filename, 'w') as out:
+                        out.write(self.resource.resource_file.read())
             elif self.resource.resource_url:
                 if self.resource.resource_url.startswith('ftp'):
                     result = urlopen(self.resource.resource_url).read()
@@ -657,7 +658,7 @@ class CacheManager(object):
     def resource_cache_size(self, resource):
         return sum(self.layer_cache_size(layer) for layer in
                    m.RenderedLayer.objects.filter(
-                       data_resource__slug =resource if isinstance(resource, basestring) else resource.slug
+                       data_resource__slug=resource if isinstance(resource, basestring) else resource.slug
                    )
         )
 
