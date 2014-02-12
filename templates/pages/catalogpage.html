@@ -46,17 +46,7 @@
         </div>
     </div>
 
-    <hr>
 
-
-    <div class="btn-toolbar">
-        {% if page.perms.add %}
-            {% subpage_button %}
-        {% endif %}
-
-        {% if page.perms.delete %}
-        <a class="btn btn-danger" href="/ga_resources/deletepage?slug={{ page.slug }}"><i class="icon-trash"></i> Delete</a>
-    {% endif %}
     </div>
 
     {% include 'pages/includes/page_permissions_editor.html' %}

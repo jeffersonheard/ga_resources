@@ -97,9 +97,7 @@ class Driver(object):
             return False
 
     def data_size(self):
-        sz = 0
-        if self.resource.resource_file and os.path.exists(self.resource.resource_file.path):
-            sz += os.stat(self.resource.resource_file.path).st_size
+        sz = self.resource.resource_file.size if self.resource.resource_file else 0
         for line in sh.du('-cs', self.cache_path):
             if line.startswith('.'):
                 sz += int(line.split(' ')[-1])

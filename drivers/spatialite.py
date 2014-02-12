@@ -78,7 +78,6 @@ class SpatialiteDriver(Driver):
         self._table_name = conn['table'] = table
         self._geometry_field = conn['geometry_field'] = geometry_field
 
-        connection.execute("create index if not exists {table}_ogc_fid on {table} (OGC_FID)".format(table=table))
         return slug, srs, conn
 
     def _connection(self):
@@ -102,6 +101,7 @@ class SpatialiteDriver(Driver):
 
         # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
         # file
+        
         if self.src_ext.endswith('zip'):
             archive = ZipFile(self.cached_basename + self.src_ext)
             projection_found = False
@@ -111,10 +111,10 @@ class SpatialiteDriver(Driver):
                     projection_found = projection_found or xtn == 'prj'
                     with open(self.cached_basename + '.' + xtn, 'wb') as fout:
                         with archive.open(name) as fin:
-                            chunk = fin.read(65536)
+                            chunk = fin.read(1024768)
                             while chunk:
                                 fout.write(chunk)
-                                chunk = fin.read(65536)
+                                chunk = fin.read(1024768)
 
             if not projection_found:
                 with open(self.cached_basename + '.prj', 'w') as f:
@@ -127,8 +127,13 @@ class SpatialiteDriver(Driver):
             if os.path.exists(out_filename):
                 os.unlink(out_filename)
 
+             # ogr2ogr -skipfailures -overwrite -f SQLite -dsco USE_SPATIALITE=YES -lco OVERWRITE=YES -dsco OGR_SQLITE_SYNCHRONOUS=OFF -gt 131072 -t_srs epsg:3857             
             sh.ogr2ogr(
-                '-skipfailures',
+                '-skipfailures', 
+                '-overwrite', 
+                '-lco', 'OVERWRITE=YES',
+                '-dsco', 'OGR_SQLITE_SYNCHRONOUS=OFF',
+                '-gt', '131072',
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
                 '-dsco', 'SPATIALITE=YES',
@@ -200,6 +205,7 @@ class SpatialiteDriver(Driver):
             table=table
         ))
 
+
         try:
             xmin, ymin, xmax, ymax = GEOSGeometry(c.fetchone()[0]).extent
         except TypeError:
@@ -208,6 +214,12 @@ class SpatialiteDriver(Driver):
         crs = osr.SpatialReference()
         crs.ImportFromEPSG(srid)
         self.resource.native_srs = crs.ExportToProj4()
+        c.execute("create index if not exists {table}_ogc_fid on {table} (OGC_FID)".format(table=table))
+        try:
+            c.execute("select CreateSpatialIndex('{table}', '{geom_field}')".format(table=table, geom_field=geometry_field))
+        except:
+           pass
+        c.close()
 
         e4326 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
