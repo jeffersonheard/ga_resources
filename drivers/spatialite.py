@@ -129,6 +129,7 @@ class SpatialiteDriver(Driver):
 
              # ogr2ogr -skipfailures -overwrite -f SQLite -dsco USE_SPATIALITE=YES -lco OVERWRITE=YES -dsco OGR_SQLITE_SYNCHRONOUS=OFF -gt 131072 -t_srs epsg:3857             
             sh.ogr2ogr(
+                '-explodecollections',
                 '-skipfailures', 
                 '-overwrite', 
                 '-lco', 'OVERWRITE=YES',
@@ -215,10 +216,6 @@ class SpatialiteDriver(Driver):
         crs.ImportFromEPSG(srid)
         self.resource.native_srs = crs.ExportToProj4()
         c.execute("create index if not exists {table}_ogc_fid on {table} (OGC_FID)".format(table=table))
-        try:
-            c.execute("select CreateSpatialIndex('{table}', '{geom_field}')".format(table=table, geom_field=geometry_field))
-        except:
-           pass
         c.close()
 
         e4326 = osr.SpatialReference()
@@ -267,7 +264,20 @@ class SpatialiteDriver(Driver):
         if table.strip().lower().startswith('select'):
             table = '(' + table + ")"
 
-        cursor.execute("SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field})".format(
+        cursor.execute("""
+        SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1 
+	   AND w.ROWID in (
+             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{table}' and search_frame = {geometry})
+        """.format(
+            geometry=geometry,
+            table=table,
+            geometry_field=geometry_field
+        ))
+        print("""
+        SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1 
+	   AND w.ROWID in (
+             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{table}' and search_frame = w.{geometry_field})
+        """.format(
             geometry=geometry,
             table=table,
             geometry_field=geometry_field
