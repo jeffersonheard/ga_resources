@@ -456,6 +456,7 @@ def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
 
     while os.path.exists(name + ".lock"):
         time.sleep(0.05)
+
     m = mapnik.Map(width, height)
     mapnik.load_map(m, (name + '.xml').encode('ascii'))
     m.zoom_to_box(mapnik.Box2d(*bbox))

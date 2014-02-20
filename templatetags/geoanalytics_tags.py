@@ -210,6 +210,8 @@ def ga_editable(parsed, context, token):
 
 @register.filter
 def contact(user):
+    if not user:
+        return "<strong>None</strong>"
     bn = best_name(user)
     email = user.email
     return '<a href="{email}">{bn}</a>'.format(**locals())

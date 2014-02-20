@@ -50,7 +50,7 @@ class SpatialiteDriver(Driver):
         connection = self._connection()
         conn = {
             'type': 'sqlite',
-            'file': self.get_filename('sqlite'),
+            'file': self.get_filename('sqlite') if 'filename' not in cfg else cfg['filename'],
             'extent': [-20037508.34, -20037508.34,
                        20037508.34, 20037508.34], # self.resource.native_bounding_box.extent,
             'wkb_format' : 'spatialite'
@@ -65,8 +65,31 @@ class SpatialiteDriver(Driver):
             self._srid = srid # srs.ExportToProj4()
         elif 'sublayer' in kwargs:
             table, geometry_field = cfg['tables']['sublayer']
+            table = table if not table.lower().startswith('select') else '(' + table + ')'
+            srid = connection.execute(
+                "select srid({geometry_field}) from {table} limit 1".format(
+                    geometry_field=geometry_field,
+                    table = table if not table.lower().startswith('select') else '(' + table + ')',
+                )).fetchone()[0] # grab the first layer with a geometry
+
+            self._tablename = table
+            self._geometry_field = geometry_field
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(srid)
+            self._srid = srid # srs.ExportToProj4()
         else:
             table, geometry_field = cfg['table']
+            table = table if not table.lower().startswith('select') else '(' + table + ')'
+            srid = connection.execute(
+                "select srid({geometry_field}) from {table} limit 1".format(
+                    geometry_field=geometry_field,
+                    table=table if not table.lower().startswith('select') else '(' + table + ')',
+                )).fetchone()[0]
+            self._tablename = table
+            self._geometry_field = geometry_field
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(srid)
+            self._srid = srid # srs.ExportToProj4()
 
         def addcfg(k):
             if k in cfg:
@@ -75,7 +98,9 @@ class SpatialiteDriver(Driver):
         addcfg('key_field')
         addcfg('encoding')
 
-        self._table_name = conn['table'] = table
+        self._table_name = table
+        conn['table'] = table
+        self._index_name = table if 'index' not in cfg else cfg['index']
         self._geometry_field = conn['geometry_field'] = geometry_field
 
         return slug, srs, conn
@@ -83,7 +108,7 @@ class SpatialiteDriver(Driver):
     def _connection(self):
         # create a database connection, or use the
         if self._conn is None:
-            conn = db.connect(self.get_filename('sqlite'))
+            conn = db.connect(self.get_filename('sqlite') if 'filename' not in self.resource.driver_config else self.resource.driver_config['filename'])
             conn.enable_load_extension(True)
             conn.execute("select load_extension('libspatialite.so')")
             conn.execute("select load_extension('/usr/lib/sqlite3/pcre.so')")
@@ -98,6 +123,8 @@ class SpatialiteDriver(Driver):
 
         if not hasattr(self, "src_ext") and self.resource.resource_file :
             self.src_ext = self.resource.resource_file.name.split('.')[-1]
+        elif not hasattr(self, 'src_ext'):
+            self.src_ext = 'sqlite'
 
         # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
         # file
@@ -131,9 +158,7 @@ class SpatialiteDriver(Driver):
             sh.ogr2ogr(
                 '-explodecollections',
                 '-skipfailures', 
-                '-overwrite', 
-                '-lco', 'OVERWRITE=YES',
-                '-dsco', 'OGR_SQLITE_SYNCHRONOUS=OFF',
+                '-overwrite',
                 '-gt', '131072',
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
@@ -168,7 +193,10 @@ class SpatialiteDriver(Driver):
                 os.unlink(out_filename)
 
             sh.ogr2ogr(
+                '-explodecollections',
                 '-skipfailures',
+                '-overwrite',
+                '-gt', '131072',
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
                 '-dsco', 'SPATIALITE=YES',
@@ -184,7 +212,10 @@ class SpatialiteDriver(Driver):
                 os.unlink(out_filename)
 
             sh.ogr2ogr(
+                '-explodecollections',
                 '-skipfailures',
+                '-overwrite',
+                '-gt', '131072',
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
                 '-dsco', 'SPATIALITE=YES',
@@ -250,13 +281,13 @@ class SpatialiteDriver(Driver):
             geometry = "GeomFromText('POINT({x} {y})', {srid})".format(
                 x=x1,
                 y=y1,
-                srid=cfg.get('srid', -1)
+                srid=self._srid
             )
         else:
             geometry = "ST_Buffer(GeomFromText('POINT({x} {y})', {srid}), {epsilon})".format(
                 x=x1,
                 y=y1,
-                srid=cfg.get('srid', -1),
+                srid=self._srid,
                 epsilon=epsilon
             )
 
@@ -266,24 +297,34 @@ class SpatialiteDriver(Driver):
 
         cursor.execute("""
         SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1 
-	   AND w.ROWID in (
-             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{table}' and search_frame = {geometry})
+	    AND w.OGC_FID in (
+             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{index}' and search_frame = {geometry})
         """.format(
             geometry=geometry,
             table=table,
+            index=table if 'index' not in self.resource.driver_config else self.resource.driver_config['index'],
             geometry_field=geometry_field
         ))
-        print("""
-        SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1 
-	   AND w.ROWID in (
-             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{table}' and search_frame = w.{geometry_field})
+        print """
+        SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1
+	    AND w.OGC_FID in (
+             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{index}' and search_frame = {geometry})
         """.format(
             geometry=geometry,
             table=table,
+            index=table if 'index' not in self.resource.driver_config else self.resource.driver_config['index'],
             geometry_field=geometry_field
-        ))
+        )
+
         rows = [list(r) for r in cursor.fetchall()]
-        keys = [c[0] for c in cursor.description]
+        if len(rows):
+            keys = [c[0] for c in cursor.description]
+            try:
+                geometry_column = keys.index(geometry_field)
+                keys = keys[:geometry_column] + keys[geometry_column+1:]
+                rows = [r[:geometry_column] + r[geometry_column+1:] for r in rows]
+            except:
+                pass
 
         return [dict(zip(keys, r)) for r in rows]
 
@@ -400,14 +441,20 @@ class SpatialiteDriver(Driver):
 
             cursor = self.connection # _cursor(**kwargs)
 
-            q = "SELECT AsBinary({geometry_column}), * FROM ({table}) AS w WHERE "
+            q = "SELECT AsBinary({geometry_column}), * FROM {table} AS w WHERE "
             addand = False
             if 'bbox' in lyr:
-                q += "ST_Intersects(GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'), {geometry_column})"
+                q += "MBRIntersects(GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'), w.{geometry_column})"
+                q += """ AND w.ROWID in (
+                  SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{index}' and search_frame = GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'))
+                """
                 addand = True
 
             if 'boundary' in lyr:
-                q += "ST_Intersects(GeomFromText('{boundary}', {geometry_column}))"
+                q += "ST_Intersects(GeomFromText('{boundary}', w.{geometry_column}))"
+                q += """ AND w.ROWID in (
+                  SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{index}' and search_frame = GeomFromText('BBOX({xmin} {ymin} {xax} {ymax})'))
+                """
                 addand = True
 
             if 'query' in lyr:
@@ -426,6 +473,7 @@ class SpatialiteDriver(Driver):
                 boundary=cfg.get('boundary', None),
                 geometry_column=geometry_column,
                 table=table,
+                index = table if 'index' not in self.resource.driver_config else self.resource.driver_config['index']
                 **lyr.get('bbox', [None, None, None, None])
             ))
             for i in range(start):
@@ -455,7 +503,7 @@ class SpatialiteDriver(Driver):
         else:
             table, geometry_column = self._table(**kwargs)
 
-            query = "SELECT AsBinary({geometry_column}), * FROM {table}".format(table=table,
+            query = "SELECT AsBinary({geometry_column}), * FROM {table}".format(table=table if not table.lower().startswith('select') else '(' + table + ')',
                                                                                 geometry_column=geometry_column)
             cursor = self._cursor(**kwargs)
             cursor.execute("select load_extension('libspatialite.so')")
@@ -641,6 +689,7 @@ class SpatialiteDriver(Driver):
         c = self._cursor()
         keys = self.schema() if not only else only
         table = self._tablename
+        index = self._index_name
         geometry = self._geometry_field
         geometry_operator = geometry_operator.lower() if geometry_operator else None
 
@@ -683,7 +732,7 @@ class SpatialiteDriver(Driver):
                 geometry_where = "distance(transform({geometry}, {srid}), {qg}) {op} {val}".format(**locals()) if len(srid)>0 else "distance({geometry}, {qg}) {op} {val}".format(
                     **locals())
             else:
-                geometry_where = "{geometry_operator}({geometry}, {qg})".format(**locals())
+                geometry_where = """{geometry_operator}({geometry}, {qg})""".format(**locals())
 
             where_values.append(query_geometry)
             where_clauses.append(geometry_where)
