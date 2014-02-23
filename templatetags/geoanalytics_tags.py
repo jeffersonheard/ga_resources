@@ -160,10 +160,17 @@ def ga_editable_loader(context):
     Set up the required JS/CSS for the in-line editing toolbar and controls.
     """
     user = context["request"].user
-    page = context['page']
-    permission = page.can_change(context['request'])
-    context["has_site_permission"] = permission #  has_site_permission(user)
-    if settings.INLINE_EDITING_ENABLED and permission:
+    page = context.get('page', None)
+
+    if page:
+        permission = page.can_change(context['request'])
+        context["has_site_permission"] = permission #  has_site_permission(user)
+        if settings.INLINE_EDITING_ENABLED and permission:
+            t = get_template("includes/ga_editable_toolbar.html")
+            context["REDIRECT_FIELD_NAME"] = REDIRECT_FIELD_NAME
+            context["toolbar"] = t.render(Context(context))
+            context["richtext_media"] = RichTextField().formfield().widget.media
+    elif user.is_staff and settings.INLINE_EDITING_ENABLED:
         t = get_template("includes/ga_editable_toolbar.html")
         context["REDIRECT_FIELD_NAME"] = REDIRECT_FIELD_NAME
         context["toolbar"] = t.render(Context(context))

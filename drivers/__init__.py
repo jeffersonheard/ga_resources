@@ -740,8 +740,11 @@ class MBTileCache(object):
             blob = buffer(c.fetchone()[0])
         except:
             dispatch.tile_rendered.send(sender=CacheManager, layers=self.layers, styles=self.styles)
-            _, blob = render('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs)
+            from ga_resources.tasks import render as delayed_render
+            # _, blob = delayed_render.delay('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs).get()
+            blob = delayed_render.delay('png', width, height, (sw[0], sw[1], ne[0], ne[1]), self.srs, self.styles, self.layers, **self.kwargs).get()
             if len(blob) > 350:
+                blob = buffer(blob)
                 d = self.cache.cursor()
                 d.execute(insert_map, [tile_id, z, x, y])
                 d.execute(insert_data, [tile_id, blob])

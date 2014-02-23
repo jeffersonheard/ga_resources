@@ -982,7 +982,7 @@ class SpatialiteDriver(Driver):
         return dict(
             [(name, human_names.get(typename, '*')) for
                 _, name, typename, _, _, _ in
-                conn.execute('pragma table_info({table})'.format(table=self._tablename)).fetchall()])
+                conn.execute('pragma table_info({table})'.format(table=self._index_name)).fetchall()])
 
 driver = SpatialiteDriver
 

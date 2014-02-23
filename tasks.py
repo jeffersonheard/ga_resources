@@ -50,3 +50,10 @@ def data_resource_compute_fields(pk):
     ds.driver_instance.compute_fields()
     if hasattr(ds.driver_instance, 'as_dataframe'):
         k = ds.dataframe # force the generationg of the canonical dataframe object
+
+@task
+def render(fmt, width, height, bbox, srs, styles, layers, **kwargs):
+    from ga_resources.drivers import render
+    _, tile = render(fmt, width, height, bbox, srs, styles, layers, **kwargs)
+    tile = str(tile)
+    return tile
