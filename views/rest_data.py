@@ -27,6 +27,15 @@ def get_user(request):
         return request.user
 
 
+def geojson_transform(request, data):
+    if request.REQUEST.get('format','wkt') == 'geojsonreal':
+       if isinstance(data, list):
+            return { 'type' : 'FeatureCollection', 'features' : [{ 'type' : 'Feature', 'geometry' : feature['GEOMETRY'], 'properties' : feature } for feature in data] }
+       else:
+            return { 'type' : 'Feature', 'properties' : data, 'geometry' : data['GEOMETRY'] }
+    else:
+       return data
+       
 
 
 def create_dataset(request):
@@ -230,13 +239,13 @@ def get_row(request, slug=None, ogc_fid=None, *args, **kwargs):
 
     format = request.REQUEST.get('format', 'wkt')
     try:
-        row = ds.driver_instance.get_row(int(ogc_fid), geometry_format=format)
+        row = ds.driver_instance.get_row(int(ogc_fid), geometry_format=format if format != 'geojsonreal' else 'geojson')
     except:
         row = None
 
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_retrieved.send(sender=DataResource, instance=ds, user=user, count=1, fid=ogc_fid)
-    return json_or_jsonp(request, row)
+    return json_or_jsonp(request, geojson_transform(request, row))
 
 
 def get_rows(request, slug=None, ogc_fid_start=None, ogc_fid_end=None, limit=None, *args, **kwargs):
@@ -246,15 +255,15 @@ def get_rows(request, slug=None, ogc_fid_start=None, ogc_fid_end=None, limit=Non
     format = request.REQUEST.get('format', 'wkt')
 
     if ogc_fid_end:
-        rows = ds.driver_instance.get_rows(int(ogc_fid_start), int(ogc_fid_end), geometry_format=format)
+        rows = ds.driver_instance.get_rows(int(ogc_fid_start), int(ogc_fid_end), geometry_format=format if format != 'geojsonreal' else 'geojson')
     elif limit:
-        rows = ds.driver_instance.get_rows(int(ogc_fid_start), limit=int(limit), geometry_format=format)
+        rows = ds.driver_instance.get_rows(int(ogc_fid_start), limit=int(limit), geometry_format=format if format != 'geojsonreal' else 'geojson')
     else:
-        rows = ds.driver_instance.get_rows(int(ogc_fid_start), geometry_format=format)
+        rows = ds.driver_instance.get_rows(int(ogc_fid_start), geometry_format=format if format != 'geojsonreal' else 'geojson')
 
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_retrieved.send(sender=DataResource, instance=ds, user=user, count=len(rows))
-    return json_or_jsonp(request, rows)
+    return json_or_jsonp(request, geojson_transform(request, rows))
 
 
 def query(request, slug=None, **kwargs):
@@ -277,12 +286,12 @@ def query(request, slug=None, **kwargs):
         only = only.split(',')
 
     rest = {k: v for k, v in request.REQUEST.items() if
-            k not in {'limit', 'start', 'end', 'only', 'g', 'op', 'format'}}
+            k not in {'limit', 'start', 'end', 'only', 'g', 'op', 'format', 'api_key','callback','jsonp', '_'}}
 
     rows = ds.driver_instance.query(
         query_mbr=geometry_mbr,
         query_geometry=geometry,
-        geometry_format=geometry_format,
+        geometry_format=geometry_format if geometry_format != 'geojsonreal' else 'geojson',
         geometry_operator=geometry_operator,
         query_geometry_srid=srid,
         limit=limit,
@@ -294,7 +303,7 @@ def query(request, slug=None, **kwargs):
 
     dispatch.api_accessed.send(sender=DataResource, instance=ds, user=user)
     dispatch.features_retrieved.send(sender=DataResource, instance=ds, user=user, count=len(rows))
-    return json_or_jsonp(request, rows)
+    return json_or_jsonp(request, geojson_transform(request, rows))
 
 
 class CRUDView(View):

@@ -32,9 +32,9 @@ def json_or_jsonp(r, i, code=200):
         i = json.dumps(i)
 
     if 'callback' in r.REQUEST:
-        return HttpResponse('{c}({i})'.format(c=r.REQUEST['callback'], i=i), mimetype='text/javascript')
+        return HttpResponse('{c}({i});'.format(c=r.REQUEST['callback'], i=i), mimetype='text/javascript')
     elif 'jsonp' in r.REQUEST:
-        return HttpResponse('{c}({i})'.format(c=r.REQUEST['jsonp'], i=i), mimetype='text/javascript')
+        return HttpResponse('{c}({i});'.format(c=r.REQUEST['jsonp'], i=i), mimetype='text/javascript')
     else:
         return HttpResponse(i, mimetype='application/json', status=code)
 
@@ -70,6 +70,8 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
 
     if auth and page is not None:
         request.user = user
+        if getattr(page, 'owner') and user == page.owner:
+            return user
         if edit:
             auth = page.can_change(request)
         if add:
@@ -77,8 +79,9 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
         if delete:
             auth = auth and page.can_delete(request)
         elif view:
-            auth = auth and (not hasattr(page, 'can_view')) or \
-                   (auth and hasattr(page, 'can_view') and page.can_view(request))
+            auth = auth and ((not hasattr(page, 'public')) or page.public) \
+                        and ((not hasattr(page, 'can_view')) or \
+                   (auth and hasattr(page, 'can_view') and page.can_view(request)))
 
     if do_raise and not auth:
         raise PermissionDenied(json.dumps({
