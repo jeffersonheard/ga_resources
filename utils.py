@@ -70,7 +70,7 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
 
     if auth and page is not None:
         request.user = user
-        if getattr(page, 'owner') and user == page.owner:
+        if hasattr(page, 'owner') and user == page.owner:
             return user
         if edit:
             auth = page.can_change(request)
