@@ -25,14 +25,14 @@ def dataresource_post_save(sender, instance, *args, **kwargs):
 
 def purge_cache_on_delete(sender, instance, *args, **kwargs):
     if sender is DataResource:
-        instance.resource.clear_cache()
+        instance.resource.driver_instance.clear_cache()
         if instance.resource_file and os.path.exists(os.path.join(s.MEDIA_ROOT, instance.resource_file.name)):
             os.unlink(os.path.join(s.MEDIA_ROOT, instance.resource_file.name))
     elif sender is Style:
         for layer in instance.renderedlayer_set.all():
-            layer.resource.clear_cache()
+            layer.data_resource.driver_instance.clear_cache()
     elif sender is RenderedLayer:
-        sender.resource.clear_cache()
+        sender.data_resource.driver_instance.clear_cache()
 
 
 def purge_resource_data(sender, instance, *args, **kwargs):
