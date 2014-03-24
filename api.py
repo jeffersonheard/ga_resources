@@ -1,5 +1,5 @@
 from tastypie.api import Api
-from tastypie.fields import ForeignKey, ManyToManyField
+from tastypie.fields import ForeignKey, ManyToManyField, OneToManyField
 from tastypie.resources import ModelResource, ALL, ALL_WITH_RELATIONS
 from tastypie.authentication import SessionAuthentication
 from tastypie.authorization import Authorization
@@ -54,12 +54,16 @@ class User(ModelResource):
 
 
 class CatalogPage(AbstractPageResource):
+    parent = ForeignKey('self', 'parent', null=True)
+    owner = ForeignKey('ga_resources.api.User', 'owner', null=True)
+
     class Meta:
         queryset = models.CatalogPage.objects.all()
         resource_name = 'catalog'
         allowed_methods = ['get']
         detail_uri_name = "slug"
-    
+        filtering = {'slug': ALL_WITH_RELATIONS, 'title': ALL, 'parent': ALL_WITH_RELATIONS}
+
     def prepend_urls(self):
         return [
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
@@ -78,14 +82,17 @@ class RelatedResource(AbstractPageResource):
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
         ]
 
-class Page(AbstractPageResource):
-   class Meta:
+class PageResource(AbstractPageResource):
+    parent = ForeignKey('self', 'parent', null=True, blank=True)
+
+    class Meta:
         queryset = Page.objects.all()
         resource_name = 'page'
         allowed_methods = ['get']
         detail_uri_name = "slug"
+        filtering = {'slug': ALL_WITH_RELATIONS, 'title': ALL, 'parent': ALL_WITH_RELATIONS}
     
-   def prepend_urls(self):
+    def prepend_urls(self):
         return [
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
         ]
@@ -117,13 +124,6 @@ class ResourceGroup(AbstractPageResource):
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
         ]
 
-resources = Api()
-resources.register(User())
-resources.register(Group())
-resources.register(RelatedResource())
-resources.register(DataResource())
-resources.register(ResourceGroup())
-resources.register(CatalogPage())
 
 
 class Style(AbstractPageResource):
@@ -138,8 +138,6 @@ class Style(AbstractPageResource):
             url(r"^(?P<resource_name>%s)/(?P<slug>[\w\d_.-]+)/$" % self._meta.resource_name, self.wrap_view('dispatch_detail'), name="api_dispatch_detail"),
         ]
 
-styles = Api()
-styles.register(Style())
 
 
 class RenderedLayer(AbstractPageResource):
@@ -159,5 +157,13 @@ class RenderedLayer(AbstractPageResource):
         ]
 
 
-layers = Api()
-layers.register(RenderedLayer())
+api = Api()
+api.register(User())
+api.register(Group())
+api.register(RelatedResource())
+api.register(DataResource())
+api.register(ResourceGroup())
+api.register(CatalogPage())
+api.register(Style())
+api.register(RenderedLayer())
+api.register(PageResource())
