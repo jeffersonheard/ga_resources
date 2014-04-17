@@ -15,9 +15,7 @@ from mezzanine.utils.urls import admin_url
 from .kmz import *
 from .ows import *
 from .rest_data import *
-
-def to_referrer(request):
-    return HttpResponseRedirect(request.META['HTTP_REFERER'])
+from ga_resources.utils import to_referrer
 
 def create_page(request):
     models = request.GET['module']

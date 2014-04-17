@@ -15,14 +15,20 @@
 # url(r'^(?P<slug>[a-z0-9\-/]+)/', views.CRUDView.as_view()),
 import json
 
-from unittest import TestCase
+from unittest import TestCase, skip
+from ga_resources.test_data import create_test_data, clear_test_data
 import requests
 
-AK = '1c6a41ed6a5bc199d10e9594090b17cb83213dbb' # API_KEY
 host = 'http://localhost:8000/'
 
-# @skip
+
 class TestRestAPI(TestCase):
+    def setUpClass(cls):
+        cls.test_data = create_test_data()
+
+    def tearDownClass(cls):
+        clear_test_data()
+
     def assertSuccess(self, response, msg='response status code: {code}\n{response}'):
         msg = msg.format(code=response.status_code, response=response.text)
         self.assertGreaterEqual(response.status_code, 200, msg=msg)
@@ -32,23 +38,23 @@ class TestRestAPI(TestCase):
         blank_dataset = requests.get(
             host + 'ga_resources/new/',
             headers={
-                "content-type" : 'application/json'
+                "content-type": 'application/json'
             },
             params={
-                "api_key" : AK,
-                "title" : 'test create empty dataset'
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test create empty dataset'
             }
         )
 
         blank_dataset_with_columns = requests.get(host + 'ga_resources/new/', params={
-          "api_key": AK,
-          "title": 'test create empty dataset',
-          'srid': 4326,
-          'columns_definitions': json.dumps({
-              "i": "real",
-              "j": "integer",
-              "name": "text"
-          })
+            "api_key": self.test_data.superuser.api_key,
+            "title": 'test create empty dataset',
+            'srid': 4326,
+            'columns_definitions': json.dumps({
+                "i": "real",
+                "j": "integer",
+                "name": "text"
+            })
         })
 
         self.assertSuccess(blank_dataset_with_columns)
@@ -66,16 +72,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-        , params={
-          "api_key": AK,
-          "title": 'test create empty dataset',
-          'srid': 4326,
-          'columns_definitions': json.dumps({
-              "i": "real",
-              "j": "integer",
-              "name": "text"
-          })
-        })
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test create empty dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
+            })
 
         self.assertSuccess(blank_dataset_with_columns)
         self.assertIn(
@@ -87,11 +93,10 @@ class TestRestAPI(TestCase):
                                    headers={
                                        "content-type": 'application/json'
                                    }
-            , params={
-            "api_key" : AK,
-        })
+                                   , params={
+                "api_key": self.test_data.superuser.api_key,
+            })
         self.assertSuccess(new_dataset, msg='failed to fork dataset')
-
 
 
     def test_fork_dataset_geometry(self):
@@ -99,16 +104,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-          "api_key": AK,
-          "title": 'test create empty dataset',
-          'srid': 4326,
-          'columns_definitions': json.dumps({
-              "i": "real",
-              "j": "integer",
-              "name": "text"
-          })
-        })
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test create empty dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
+            })
 
         self.assertSuccess(blank_dataset_with_columns)
         self.assertIn(
@@ -120,9 +125,9 @@ class TestRestAPI(TestCase):
                                    headers={
                                        "content-type": 'application/json'
                                    }
-            , params={
-            "api_key": AK,
-        })
+                                   , params={
+                "api_key": self.test_data.superuser.api_key,
+            })
         self.assertSuccess(new_dataset)
 
 
@@ -131,16 +136,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -151,7 +156,7 @@ class TestRestAPI(TestCase):
 
         self.assertListEqual(
             sorted([c['name'].lower() for c in schema]),
-            ['geometry','i','j','name','ogc_fid'],
+            ['geometry', 'i', 'j', 'name', 'ogc_fid'],
             msg='schema should have had 5 fields, was\n{schema}'.format(schema=schema))
 
 
@@ -160,25 +165,23 @@ class TestRestAPI(TestCase):
                                      headers={
                                          "content-type": 'application/json'
                                      }
-            , params={
-            "api_key": AK,
-            "title": 'test create empty dataset'
-        })
+                                     , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test create empty dataset'
+            })
         self.assertSuccess(blank_dataset, msg='failed to create dataset {code}')
-
 
         path = blank_dataset.json()['path']
         add_column = requests.get(host + 'ga_resources/' + path + '/add_column/',
                                   headers={
                                       "content-type": 'application/json'
                                   }
-            , params={
-            "api_key": AK,
-            "name" : "p",
-            "type" : "text"
-        })
+                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "name": "p",
+                "type": "text"
+            })
         self.assertSuccess(add_column)
-
 
 
     def test_add_row(self):
@@ -186,16 +189,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -203,8 +206,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -218,16 +221,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -235,8 +238,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -248,13 +251,12 @@ class TestRestAPI(TestCase):
                              headers={
                                  "content-type": 'application/json'
                              }
-            , params={
-            "name__contains" : 'oll'
-        })
+                             , params={
+                "name__contains": 'oll'
+            })
         self.assertSuccess(query)
 
         self.assertGreater(len(query.json()), 0, msg='zero results returned')
-
 
 
     def test_spatial_query(self):
@@ -262,16 +264,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -279,8 +281,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -296,9 +298,9 @@ class TestRestAPI(TestCase):
                              headers={
                                  "content-type": 'application/json'
                              }
-            , params={
-            "g" : "POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))"
-        })
+                             , params={
+                "g": "POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))"
+            })
         self.assertSuccess(query)
         self.assertGreater(len(query.json()), 0, msg='zero results returned')
 
@@ -307,16 +309,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -324,8 +326,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -342,16 +344,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -359,8 +361,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -372,8 +374,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -385,8 +387,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -424,16 +426,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -441,8 +443,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -460,40 +462,40 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
         add_row = requests.post(host + 'ga_resources/' + path + '/',
-                               headers={
-                                   "content-type": 'application/json'
-                               }
-            , params={
-                "api_key": AK,
+                                headers={
+                                    "content-type": 'application/json'
+                                }
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
-            "j": 2,
-            "name": "folly",
-            'GEOMETRY': "POINT(1 1)"
-        })
+                "j": 2,
+                "name": "folly",
+                'GEOMETRY': "POINT(1 1)"
+            })
         self.assertSuccess(add_row)
 
         query = requests.put(host + 'ga_resources/' + path + '/1/',
                              headers={
                                  "content-type": 'application/json'
                              }
-            , params={
-            "api_key":AK,
-            "i" : 1.0
-        })
+                             , params={
+                "api_key": self.test_data.superuser.api_key,
+                "i": 1.0
+            })
         self.assertSuccess(query)
 
 
@@ -502,16 +504,16 @@ class TestRestAPI(TestCase):
                                                   headers={
                                                       "content-type": 'application/json'
                                                   }
-            , params={
-            "api_key": AK,
-            "title": 'test schema dataset',
-            'srid': 4326,
-            'columns_definitions': json.dumps({
-                "i": "real",
-                "j": "integer",
-                "name": "text"
+                                                  , params={
+                "api_key": self.test_data.superuser.api_key,
+                "title": 'test schema dataset',
+                'srid': 4326,
+                'columns_definitions': json.dumps({
+                    "i": "real",
+                    "j": "integer",
+                    "name": "text"
+                })
             })
-        })
         self.assertSuccess(blank_dataset_with_columns, msg='failed to create dataset {code}')
 
         path = blank_dataset_with_columns.json()['path']
@@ -519,8 +521,8 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 }
-            , params={
-                "api_key": AK,
+                                , params={
+                "api_key": self.test_data.superuser.api_key,
                 "i": 0.0,
                 "j": 2,
                 "name": "folly",
@@ -532,7 +534,7 @@ class TestRestAPI(TestCase):
                                 headers={
                                     "content-type": 'application/json'
                                 },
-                                params={ "api_key": AK, }
+                                params={"api_key": self.test_data.superuser.api_key, }
 
         )
         self.assertSuccess(query)

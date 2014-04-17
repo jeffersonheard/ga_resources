@@ -36,11 +36,11 @@ def get_user(request):
 
 class PagePermissionsMixin(models.Model):
     owner = models.ForeignKey(User, related_name='owned_%(app_label)s_%(class)s', null=True)
-    publicly_viewable = models.BooleanField(default=True)
+    public = models.BooleanField(default=True)
     edit_users = models.ManyToManyField(User, related_name='editable_%(app_label)s_%(class)s', null=True, blank=True)
     view_users = models.ManyToManyField(User, related_name='viewable_%(app_label)s_%(class)s', null=True, blank=True)
-    edit_groups = models.ManyToManyField(User, related_name='group_editable_%(app_label)s_%(class)s', null=True, blank=True)
-    view_groups = models.ManyToManyField(User, related_name='group_viewable_%(app_label)s_%(class)s', null=True, blank=True)
+    edit_groups = models.ManyToManyField(Group, related_name='group_editable_%(app_label)s_%(class)s', null=True, blank=True)
+    view_groups = models.ManyToManyField(Group, related_name='group_viewable_%(app_label)s_%(class)s', null=True, blank=True)
 
     def can_add(self, request):
         return self.can_change(request)
@@ -93,13 +93,13 @@ class PagePermissionsMixin(models.Model):
 
     def copy_permissions_to_children(self, recurse=False):
         # pedantically implemented.  should use set logic to minimize changes, but ptobably not important
-        for child in self.children:
+        for child in self.children.all():
             if isinstance(child, PagePermissionsMixin):
                 child.edit_users = [u for u in self.edit_users.all()]
                 child.view_users = [u for u in self.view_users.all()]
                 child.edit_groups = [g for g in self.edit_groups.all()]
                 child.view_groups = [g for g in self.view_groups.all()]
-                child.public = self.public
+                child.publicly_viewable = self.publicly_viewable
                 child.owner = self.owner
                 child.save()
                     
@@ -108,16 +108,19 @@ class PagePermissionsMixin(models.Model):
 
 
     def copy_permissions_from_parent(self):
-        parent = self.parent.get_content_model()
-        if isinstance(parent, PagePermissionsMixin):
-            self.view_groups = [g for g in self.parent.view_groups.all()]
-            self.edit_groups = [g for g in self.parent.edit_groups.all()]
-            self.view_users = [u for u in self.parent.view_users.all()]
-            self.edit_users = [u for u in self.parent.edit_users.all()]
-            self.public = self.parent.public
-            self.owner = self.parent.owner
-            self.save()
+        if self.parent:
+            parent = self.parent.get_content_model()
+            if isinstance(parent, PagePermissionsMixin):
+                self.view_groups = [g for g in self.parent.view_groups.all()]
+                self.edit_groups = [g for g in self.parent.edit_groups.all()]
+                self.view_users = [u for u in self.parent.view_users.all()]
+                self.edit_users = [u for u in self.parent.edit_users.all()]
+                self.public = self.parent.public
+                self.owner = self.parent.owner
+                self.save()
 
+    class Meta:
+        abstract=True
 
 # this should be used as the page processor for anything with pagepermissionsmixin
 # page_processor_for(MyPage)(ga_resources.views.page_permissions_page_processor)
@@ -138,9 +141,6 @@ def page_permissions_page_processor(request, page):
 
 class CatalogPage(Page, PagePermissionsMixin):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
-
-    public = models.BooleanField(default=True)
-    owner = models.ForeignKey(User, null=True)
 
     class Meta:
         ordering = ['title']
@@ -223,8 +223,6 @@ class DataResource(Page, RichText, PagePermissionsMixin):
     bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
     three_d = models.BooleanField(default=False)
     native_srs = models.TextField(null=True, blank=True)
-    public = models.BooleanField(default=True)
-    owner = models.ForeignKey(User, null=True)
 
     driver = models.CharField(
         default='ga_resources.drivers.spatialite',
@@ -341,8 +339,6 @@ class Style(Page, PagePermissionsMixin):
     legend_width = models.IntegerField(null=True, blank=True)
     legend_height = models.IntegerField(null=True, blank=True)
     stylesheet = models.TextField()
-    public = models.BooleanField(default=True)
-    owner = models.ForeignKey(User, null=True)
 
     def modified(self):
         if s.WMS_CACHE_DB.exists(self.slug):
@@ -358,5 +354,3 @@ class RenderedLayer(Page, RichText, PagePermissionsMixin):
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
     default_class = models.CharField(max_length=255, default='default')
     styles = models.ManyToManyField(Style)
-    public = models.BooleanField(default=True)
-    owner = models.ForeignKey(User, null=True)

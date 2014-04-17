@@ -5,17 +5,135 @@ functions in the module are probably the date manipulation functions.
 from collections import namedtuple
 import datetime
 import json
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.forms import MultipleChoiceField, Field
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.formats import sanitize_separators
 from mezzanine.pages.models import Page
 from .models import CatalogPage
 from osgeo import osr
+from tastypie.models import ApiKey
 import re
 
+
+def to_referrer(request):
+    return HttpResponseRedirect(request.META['HTTP_REFERER'])
+
+
+def to_user(u):
+    """
+    Return a user whether we were passed a username, an email address, or a User instance.
+
+    :param u:  a username, an email address, or a User instance
+    :return: auth.User
+    """
+    if isinstance(u, basestring):
+        try:
+            u = User.objects.get(username=u)
+        except:
+            u = User.objects.get(email=u)
+    return u
+
+
+def to_group(u):
+    """
+    Return a group whether we were passed a name or a Group instance.
+
+    :param u: a name or a Group instance.
+    :return: auth.Group
+    """
+    if isinstance(u, basestring):
+        u = Group.objects.get(name=u)
+    return u
+
+def create_geoanalytics_page(cls, owner=None, edit_users=None, edit_groups=None, view_users=None, view_groups=None,
+                             parent=None, inherit=True, **kwargs):
+    """
+    Create a new page in TerraHub using its default rules for permission
+    inheritance and menu presence.
+
+    By default we inherit read/write permissions from the parent and menu
+    presence is None unless specified.
+
+    :param cls: classname of the page to be created
+    :param owner: auth.User, string username, or string email address of the owner of the page
+    :param edit_users: these users have view and edit permissions (replaces inherited)
+    :param edit_groups: these groups and all their users have view and edit permissions
+    :param view_users: these users have view permissions
+    :param view_groups: these groups have view permissions
+    :param parent: this is the parent page.
+    :param inherit: if the parent page subclasses the PagePermissionsMixin, the created page inherits its permissions
+    :param kwargs: any other keyword args to pass to cls.objects.create()
+    :return: the new, saved instance of the Page
+    """
+
+    kwargs['in_menus'] = [] if not 'in_menus' in kwargs else kwargs['in_menus']
+    if parent:
+        if isinstance(parent, basestring):
+            parent = Page.objects.get(slug=kwargs['parent'])
+
+    owner = to_user(owner)
+
+    new = cls.objects.create(parent=parent, owner=owner, **kwargs)
+
+    edit_users = [to_user(user) for user in edit_users] if edit_users else None
+    view_users = [to_user(user) for user in view_users] if view_users else None
+    edit_groups = [to_group(group) for group in edit_groups] if edit_groups else None
+    view_groups = [to_group(group) for group in view_groups] if view_groups else None
+
+    if hasattr(kwargs.get('parent', None), 'public'):
+        new.copy_permissions_from_parent()
+    if edit_users:
+        new.edit_users = edit_users
+    if edit_groups:
+        new.edit_groups = edit_groups
+    if view_users:
+        view_users.extend(edit_users or [])
+        new.view_users = view_users
+    if view_groups:
+        view_groups.extend(edit_groups or [])
+        new.view_groups = view_groups
+
+    if not any((inherit, parent, edit_groups, view_groups, edit_users, view_users, owner)):
+        new.public = True
+        new.save()
+
+    if inherit:
+        new.copy_permissions_from_parent()
+
+    return new
+
+def create_geoanalytics_user(username, email, password, superuser=False, staff=False, *groups):
+    """
+    Creates a user, making sure that the API key also gets created.
+
+    :param username: the username to created
+    :param email: the email address for the created user
+    :param password: the password for the user
+    :param superuser: if the user is a supseruser
+    :param staff: if the user is staff
+    :param groups: the groups that the user is a part of
+    :return: auth.User
+    """
+    if superuser:
+        u = User.objects.create_superuser(username=username, email=email, password=password)
+    else:
+        u = User.objects.create_user(username=username, email=email, password=password)
+
+    if staff:
+        u.is_staff=True
+        u.save()
+    u.groups = [g for g in groups]
+    ApiKey.objects.get_or_create(user=u)
+    return u
+
+
 def best_name(user):
+    """
+    :param user: auth.User
+    :return: first name + last name or username if the others aren't defined.
+    """
     profile = user.get_profile()
     if not profile.display_name:
         if user.first_name:
@@ -28,6 +146,14 @@ def best_name(user):
 
 
 def json_or_jsonp(r, i, code=200):
+    """
+    If callback or jsonp paraemters are defined, then return as JSONP else return as JSON
+
+    :param r: HttpRequest
+    :param i: The instance to serialize to JSON (probably a dict) or a string that is assumed to be JSON
+    :param code: The Response code to return
+    :return:
+    """
     if not isinstance(i, basestring):
         i = json.dumps(i)
 
@@ -62,39 +188,52 @@ def get_stylesheet_page_for_user(user):
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
     if isinstance(page, basestring):
-        page = Page.objects.get(slug=page).get_content_model()
+        page = Page.objects.get(slug=page)
 
     user = get_user(request)
     request.user = user
     auth = True
 
-    if auth and page is not None:
-        request.user = user
-        if getattr(page, 'owner') and user == page.owner:
-            return user
+    if user.is_superuser:
+        return True
+
+    if page:
+        if hasattr(page, 'owner') and page.owner and page.owner.pk == user.pk:
+            return True
+
+        if view:
+            if not hasattr(page, 'public'):
+                return True
+
+            can_view = page.public or page.can_change(request) or (hasattr(page, 'can_view') and page.can_view(request))
         if edit:
-            auth = page.can_change(request)
+            can_change = page.can_change(request)
+
         if add:
-            auth = auth and page.can_add(request)
+            can_add = page.can_add(request)
+
         if delete:
-            auth = auth and page.can_delete(request)
-        elif view:
-            auth = auth and ((not hasattr(page, 'public')) or page.public) \
-                        and ((not hasattr(page, 'can_view')) or \
-                   (auth and hasattr(page, 'can_view') and page.can_view(request)))
+            can_delete = page.can_delete(request)
 
-    if do_raise and not auth:
-        raise PermissionDenied(json.dumps({
-            "error": "Unauthorized",
-            "user": user.email if user.is_authenticated() else None,
-            "page": page.slug if page else None,
-            "edit": edit,
-            "add": add,
-            "delete": delete,
-            "view": view
-        }))
+        auth = all((
+            (not view or can_view),
+            (not edit or can_change),
+            (not add or can_add),
+            (not delete or can_delete)
+        ))
 
-    return user
+        if not auth:
+            raise PermissionDenied(json.dumps({
+                "error": "Unauthorized",
+                "user": user.email if user.is_authenticated() else None,
+                "page": page.slug if page else None,
+                "edit": edit,
+                "add": add,
+                "delete": delete,
+                "view": view
+            }))
+        else:
+            return True
 
 def get_user(request):
     """authorize user based on API key if it was passed, otherwise just use the request's user.
@@ -102,6 +241,9 @@ def get_user(request):
     :param request:
     :return: django.contrib.auth.User
     """
+    if isinstance(request.user, User):
+        return request.user
+
     from tastypie.models import ApiKey
     if isinstance(request, basestring):
         return User.objects.get(username=request)
