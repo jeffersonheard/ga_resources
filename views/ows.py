@@ -248,7 +248,11 @@ def tms(request, layer, z, x, y, **kwargs):
     # dispatch.api_accessed.send(RenderedLayer, instance=layer_instance, user=user)
     style = request.GET.get('style', layer_instance.default_style.slug)
     tms = CacheManager.get().get_tile_cache([layer], [style])
-    return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')
+    try:
+       return HttpResponse(tms.fetch_tile(z, x, y), mimetype='image/png')
+    except Exception, e:
+       return HttpResponse(str(e), mimetype='text/plain')
+       
 
 def seed_layer(request, layer):
     mnz = int(request.GET['minz'])
