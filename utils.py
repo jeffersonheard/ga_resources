@@ -11,7 +11,7 @@ from django.forms import MultipleChoiceField, Field
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils.formats import sanitize_separators
 from mezzanine.pages.models import Page
-from .models import CatalogPage
+from .models import CatalogPage, PagePermissionsMixin
 from osgeo import osr
 from tastypie.models import ApiKey
 import re
@@ -104,7 +104,7 @@ def create_geoanalytics_page(cls, owner=None, edit_users=None, edit_groups=None,
 
     return new
 
-def create_geoanalytics_user(username, email, password, superuser=False, staff=False, *groups):
+def create_geoanalytics_user(username, email, password, superuser=False, staff=False, first_name=None, last_name=None, *groups):
     """
     Creates a user, making sure that the API key also gets created.
 
@@ -117,9 +117,19 @@ def create_geoanalytics_user(username, email, password, superuser=False, staff=F
     :return: auth.User
     """
     if superuser:
-        u = User.objects.create_superuser(username=username, email=email, password=password)
+        u = User.objects.create_superuser(
+            username=username,
+            email=email,
+            first_name=first_name or '',
+            last_name=last_name or '',
+            password=password)
     else:
-        u = User.objects.create_user(username=username, email=email, password=password)
+        u = User.objects.create_user(
+            username=username,
+            email=email,
+            first_name=first_name or '',
+            last_name=last_name or '',
+            password=password)
 
     if staff:
         u.is_staff=True
@@ -137,7 +147,11 @@ def best_name(user):
     profile = user.get_profile()
     if not profile.display_name:
         if user.first_name:
-            profile.display_name = user.first_name + (' ' + user.last_name if user.last_name else '') + '(' + user.username + ')'
+            profile.display_name = user.first_name + (' ' + user.last_name if user.last_name else '')
+            profile.save()
+        elif user.email:
+            address, server = user.email.split('@')
+            profile.display_name = address + ' at ' + server
             profile.save()
         else:
             profile.display_name = user.username
@@ -190,39 +204,47 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
     if isinstance(page, basestring):
         page = Page.objects.get(slug=page)
 
-    user = get_user(request)
-    request.user = user
-    auth = True
+    user = request if isinstance(request, User) else get_user(request.user)
 
     if user.is_superuser:
         return True
 
-    if page:
-        if hasattr(page, 'owner') and page.owner and page.owner.pk == user.pk:
-            return True
+    if isinstance(page.get_content_model(), PagePermissionsMixin):
+        page = page.get_content_model()
 
         if view:
-            if not hasattr(page, 'public'):
-                return True
+            can_view = (not page.owner) or \
+                       page.public or \
+                       (user.is_authenticated() and (page.can_change(request) or page.can_view(request)))
+        else:
+            can_view = None
+    else:
+        can_view = True
 
-            can_view = page.public or page.can_change(request) or (hasattr(page, 'can_view') and page.can_view(request))
-        if edit:
-            can_change = page.can_change(request)
+    if edit:
+        can_change = user.is_authenticated() and page.can_change(request)
+    else:
+        can_change = None
 
-        if add:
-            can_add = page.can_add(request)
+    if add:
+        can_add = user.is_authenticated() and page.can_add(request)
+    else:
+        can_add = None
 
-        if delete:
-            can_delete = page.can_delete(request)
+    if delete:
+        can_delete = user.is_authenticated() and page.can_delete(request)
+    else:
+        can_delete = None
 
-        auth = all((
-            (not view or can_view),
-            (not edit or can_change),
-            (not add or can_add),
-            (not delete or can_delete)
-        ))
+    auth = all((
+        ((not view) or can_view),
+        ((not edit) or can_change),
+        ((not add) or can_add),
+        ((not delete) or can_delete)
+    ))
 
-        if not auth:
+    if not auth:
+        if do_raise:
             raise PermissionDenied(json.dumps({
                 "error": "Unauthorized",
                 "user": user.email if user.is_authenticated() else None,
@@ -233,7 +255,9 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
                 "view": view
             }))
         else:
-            return True
+            return False
+    else:
+        return True
 
 def get_user(request):
     """authorize user based on API key if it was passed, otherwise just use the request's user.
@@ -241,12 +265,20 @@ def get_user(request):
     :param request:
     :return: django.contrib.auth.User
     """
-    if isinstance(request.user, User):
-        return request.user
+    if isinstance(request, User):
+        return request
+    if request is None:
+        return request
 
     from tastypie.models import ApiKey
     if isinstance(request, basestring):
-        return User.objects.get(username=request)
+        try:
+            return User.objects.get(username=request)
+        except:
+            return User.objects.get(email=request)
+    elif isinstance(request, int):
+        return User.objects.get(pk=request)
+
     elif 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user

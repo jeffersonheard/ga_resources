@@ -13,6 +13,9 @@ class PagePermissionsViewableMiddleware(object):
             slug = slug.strip('/')
         if slug == '':
             return None
+
         page_or_none = Page.objects.filter(slug=slug)
         if page_or_none.exists():
             authorize(request, page_or_none[0], view=True)
+        else:
+            return None

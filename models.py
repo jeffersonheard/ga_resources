@@ -25,14 +25,26 @@ def get_user(request):
     :param request:
     :return: django.contrib.auth.User
     """
+    if isinstance(request, User):
+        return request
+
     from tastypie.models import ApiKey
-    if 'api_key' in request.REQUEST:
+    if isinstance(request, basestring):
+        try:
+            return User.objects.get(username=request)
+        except:
+            return User.objects.get(email=request)
+    elif isinstance(request, int):
+        return User.objects.get(pk=request)
+
+    elif 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user
     elif request.user.is_authenticated():
         return User.objects.get(pk=request.user.pk)
     else:
         return request.user
+
 
 class PagePermissionsMixin(models.Model):
     owner = models.ForeignKey(User, related_name='owned_%(app_label)s_%(class)s', null=True)
@@ -52,14 +64,14 @@ class PagePermissionsMixin(models.Model):
         user = get_user(request)
 
         if user.is_authenticated():
-            if not self.owner:
-                ret = user.is_superuser
+            if user.is_superuser:
+                ret = True
             elif user.pk == self.owner.pk:
                 ret = True
             else:
                 if self.edit_users.filter(pk=user.pk).exists():
                     ret = True
-                if self.edit_groups.filter(pk__in=[g.pk for g in user.groups.all()]):
+                elif self.edit_groups.filter(pk__in=[g.pk for g in user.groups.all()]):
                     ret = True
                 else:
                     ret =  False
@@ -72,17 +84,17 @@ class PagePermissionsMixin(models.Model):
         user = get_user(request)
 
         if self.public or not self.owner:
-            ret = True
+            return True
 
         if user.is_authenticated():
-            if not self.owner:
-                ret = user.is_superuser
+            if user.is_superuser:
+                ret = True
             elif user.pk == self.owner.pk:
                 ret = True
             else:
                 if self.view_users.filter(pk=user.pk).exists():
                     ret = True
-                if self.view_groups.filter(pk__in=[g.pk for g in user.groups.all()]):
+                elif self.view_groups.filter(pk__in=[g.pk for g in user.groups.all()]):
                     ret = True
                 else:
                     ret = False
@@ -178,8 +190,15 @@ class CatalogPage(Page, PagePermissionsMixin):
 
         return p
 
-    def save(self, *args, **kwargs):
-        return super(CatalogPage, self).save(*args, **kwargs)
+    def can_add(self, request):
+        return PagePermissionsMixin.can_add(self, request)
+
+    def can_change(self, request):
+        return PagePermissionsMixin.can_change(self, request)
+
+    def can_delete(self, request):
+        return PagePermissionsMixin.can_delete(self, request)
+
 
 def set_permissions_for_new_catalog_page(sender, instance, created, *args, **kwargs):
     if instance.parent and created:
@@ -281,6 +300,16 @@ class DataResource(Page, RichText, PagePermissionsMixin):
         return json.loads(self.resource_config) if self.resource_config else {}
 
 
+    def can_add(self, request):
+        return PagePermissionsMixin.can_add(self, request)
+
+    def can_change(self, request):
+        return PagePermissionsMixin.can_change(self, request)
+
+    def can_delete(self, request):
+        return PagePermissionsMixin.can_delete(self, request)
+
+
         
 
 class OrderedResource(models.Model):
@@ -348,9 +377,32 @@ class Style(Page, PagePermissionsMixin):
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
 
+    def can_add(self, request):
+        return PagePermissionsMixin.can_add(self, request)
+
+    def can_change(self, request):
+        return PagePermissionsMixin.can_change(self, request)
+
+    def can_delete(self, request):
+        return PagePermissionsMixin.can_delete(self, request)
+
+
+
+
 class RenderedLayer(Page, RichText, PagePermissionsMixin):
     """All the general stuff for a layer.  Layers inherit ownership and group info from the data resource"""
     data_resource = models.ForeignKey(DataResource)
     default_style = models.ForeignKey(Style, related_name='default_for_layer')
     default_class = models.CharField(max_length=255, default='default')
     styles = models.ManyToManyField(Style)
+
+
+    def can_add(self, request):
+        return PagePermissionsMixin.can_add(self, request)
+
+    def can_change(self, request):
+        return PagePermissionsMixin.can_change(self, request)
+
+    def can_delete(self, request):
+        return PagePermissionsMixin.can_delete(self, request)
+

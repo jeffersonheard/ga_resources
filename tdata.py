@@ -13,7 +13,7 @@ from collections import namedtuple
 def create_groups(*names):
     gs = []
     for name in names:
-        gs.append(Group.objects.create(name=name))
+        gs.append(Group.objects.get_or_create(name=name)[0])
     return gs
 
 
@@ -34,6 +34,7 @@ def clear_test_data():
     get_model('ga_resources','Style').objects.all().delete()
     get_model('ga_resources','RenderedLayer').objects.all().delete()
     get_model('ga_resources','DataResource').objects.all().delete()
+    get_model('ga_resources','CatalogPage').objects.all().delete()
 
 def create_test_data():
     """
@@ -61,18 +62,18 @@ def create_test_data():
     :return: a dict of all the test data that was created.
     """
     good_users, bad_users = create_groups('Good Users', 'Bad Users')
-    superuser = create_geoanalytics_user('root', 'jeff@terrahub.io', 'foobar', True, True, good_users)
-    owner = create_geoanalytics_user('owner', 'owner@terrahub.io', 'foobar', False, True, good_users)
+    superuser = create_geoanalytics_user('root2', 'jeff@terrahub.io', 'foobar', True, True, 'Jeff','Heard',good_users)
+    owner = create_geoanalytics_user('owner', 'owner@terrahub.io', 'foobar', False, True, 'Mike','Whitson',good_users)
 
-    staff_user = create_geoanalytics_user('staff1', 'regular1@terrahub.io', 'foobar', False, True, good_users)
-    regular1 = create_geoanalytics_user('regular1', 'regular1@terrahub.io', 'foobar', False, False, good_users)
-    regular2 = create_geoanalytics_user('regular2', 'regular2@terrahub.io', 'foobar', False, False, good_users)
-    regular3 = create_geoanalytics_user('regular3', 'regular3@terrahub.io', 'foobar', False, False, good_users)
-    regular4 = create_geoanalytics_user('regular4', 'regular4@terrahub.io', 'foobar', False, False, good_users)
-    abusive_user = create_geoanalytics_user('abusive_user', 'abusive1@terrahub.io', 'foobar', False, False, bad_users)
-    abusive_staff = create_geoanalytics_user('abusive_staff', 'abusive2@terrahub.io', 'foobar', True, False, bad_users)
-    abusive_superuser = create_geoanalytics_user('abusive_superuser', 'abusive3@terrahub.io', 'foobar', False, True, bad_users)
-    orphan = create_geoanalytics_user('orphan', 'orphan@terrahub.io', 'foobar', False, False)
+    staff_user = create_geoanalytics_user('staff1', 'regular1@terrahub.io', 'foobar', False, True, 'Casey','Averill', good_users)
+    regular1 = create_geoanalytics_user('regular1', 'regular1@terrahub.io', 'foobar', False, False, 'John','Galloway', good_users)
+    regular2 = create_geoanalytics_user('regular2', 'regular2@terrahub.io', 'foobar', False, False, 'Tracey','Callison',good_users)
+    regular3 = create_geoanalytics_user('regular3', 'regular3@terrahub.io', 'foobar', False, False, 'Lisa','Chensvold',good_users)
+    regular4 = create_geoanalytics_user('regular4', 'regular4@terrahub.io', 'foobar', False, False, 'Bob','Heard',good_users)
+    abusive_user = create_geoanalytics_user('abusive_user', 'abusive1@terrahub.io', 'foobar', False, False, 'Snively','Whiplash', bad_users)
+    abusive_staff = create_geoanalytics_user('abusive_staff', 'abusive2@terrahub.io', 'foobar', True, False, 'George','Bush', bad_users)
+    abusive_superuser = create_geoanalytics_user('abusive_superuser', 'abusive3@terrahub.io', 'foobar', False, True, 'Rick','Perry',bad_users)
+    orphan = create_geoanalytics_user('orphan', 'orphan@terrahub.io', 'foobar', 'Annie','Orpan', False, False)
 
     unowned_catalog_page = create_geoanalytics_page(CatalogPage, title='unowned cp', in_menus=[1])
     public_catalog_page = create_geoanalytics_page(CatalogPage, title='public cp', in_menus=[1], owner=owner, public=True)

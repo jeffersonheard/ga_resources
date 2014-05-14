@@ -1,5 +1,5 @@
 from unittest import TestCase, skip
-from ga_resources.test_data import create_test_data, clear_test_data
+from ga_resources.tdata import create_test_data, clear_test_data
 from ga_resources.utils import authorize
 
 
