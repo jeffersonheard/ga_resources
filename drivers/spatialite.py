@@ -58,6 +58,7 @@ class SpatialiteDriver(Driver):
 
         if 'table' not in cfg:
             table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
+            geometry_field = 'GEOMETRY' if geometry_field == 'geometry' else geometry_field
             self._tablename = table
             self._geometry_field = geometry_field
             srs = osr.SpatialReference()
@@ -516,7 +517,10 @@ class SpatialiteDriver(Driver):
             records = []
             for record in cursor:
                 records.append({name: value for i, (name, value) in enumerate(zip(names, record)) if i != throwaway_ix})
-                records[-1]['geometry'] = wkb.loads(str(records[-1]['AsBinary(GEOMETRY)']))
+                try:
+                    records[-1]['geometry'] = wkb.loads(str(records[-1]['AsBinary(GEOMETRY)']))
+                except:
+                    pass
                 del records[-1]['AsBinary(GEOMETRY)']
 
             df = DataFrame.from_records(data=records)

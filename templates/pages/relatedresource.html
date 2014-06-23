@@ -101,7 +101,7 @@
     <script type="text/javascript">
         $(function () {
             var in_options = {
-                internalProjection: new OpenLayers.Projection('EPSG:900913'),
+                internalProjection: new OpenLayers.Projection('EPSG:3857'),
                 externalProjection: new OpenLayers.Projection("EPSG:4326")
             };
 
@@ -111,7 +111,7 @@
             bboxLayer.addFeatures([feature]);
             var bounds = feature.geometry.getBounds();
 
-            var map = new OpenLayers.Map({ div: 'map', projection: "EPSG:900913", layers: [
+            var map = new OpenLayers.Map({ div: 'map', projection: "EPSG:3857", layers: [
                 new OpenLayers.Layer.XYZ(
                         "OpenStreetMap",
                         [

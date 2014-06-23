@@ -684,7 +684,7 @@ class MBTileCache(object):
         e4326 = osr.SpatialReference()
         e3857 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
-        e3857.ImportFromEPSG(900913)
+        e3857.ImportFromEPSG(3857)
         self.crx = osr.CoordinateTransformation(e4326, e3857)
 
         paths = os.path.split(self.cachename)[:-1]
@@ -811,7 +811,7 @@ class MBTileCache(object):
         e4326 = osr.SpatialReference()
         e3857 = osr.SpatialReference()
         e4326.ImportFromEPSG(4326)
-        e3857.ImportFromEPSG(900913)
+        e3857.ImportFromEPSG(3857)
         crx = osr.CoordinateTransformation(e3857, e4326)
         x1, y1, _ = crx.TransformPoint(x1, y1)
         x2, y2, _ = crx.TransformPoint(x2, y2)
