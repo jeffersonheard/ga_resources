@@ -145,18 +145,15 @@ def best_name(user):
     :return: first name + last name or username if the others aren't defined.
     """
     profile = user.get_profile()
-    if not profile.display_name:
-        if user.first_name:
-            profile.display_name = user.first_name + (' ' + user.last_name if user.last_name else '')
-            profile.save()
-        elif user.email:
-            address, server = user.email.split('@')
-            profile.display_name = address + ' at ' + server
-            profile.save()
-        else:
-            profile.display_name = user.username
-            profile.save()
-    return profile.display_name
+    if profile.display_name:
+        return profile.display_name
+    elif user.first_name:
+        return user.first_name + (' ' + user.last_name if user.last_name else '')
+    elif user.email:
+        address, server = user.email.split('@')
+        return address + ' at ' + server
+    else:
+        return user.username
 
 
 def json_or_jsonp(r, i, code=200):
