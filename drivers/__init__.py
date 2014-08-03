@@ -216,6 +216,7 @@ class Driver(object):
         of its extension and the new extension appended.
         """
         filename = os.path.split(self.resource.slug)[-1]
+        print os.path.join(self.cache_path, filename + '.' + xtn)
         return os.path.join(self.cache_path, filename + '.' + xtn)
 
     def get_data_for_point(self, wherex, wherey, srs, fuzziness=30, **kwargs):

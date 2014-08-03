@@ -198,13 +198,16 @@ def get_stylesheet_page_for_user(user):
     return p
 
 def authorize(request, page=None, edit=False, add=False, delete=False, view=False, do_raise=True):
-    if isinstance(page, basestring):
+    if isinstance(page, int):
+        page = Page.objects.get(pk=page)
+    elif isinstance(page, basestring):
         page = Page.objects.get(slug=page)
+
 
     user = request if isinstance(request, User) else get_user(request.user)
 
     if user.is_superuser:
-        return True
+        return page
 
     if isinstance(page.get_content_model(), PagePermissionsMixin):
         page = page.get_content_model()
@@ -254,7 +257,7 @@ def authorize(request, page=None, edit=False, add=False, delete=False, view=Fals
         else:
             return False
     else:
-        return True
+        return page
 
 def get_user(request):
     """authorize user based on API key if it was passed, otherwise just use the request's user.

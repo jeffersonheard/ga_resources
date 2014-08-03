@@ -1,5 +1,6 @@
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.db.models import Model
+from markdown import markdown
 from ga_resources.utils import best_name, get_user
 from mezzanine import template
 from mezzanine.pages.models import Page
@@ -215,7 +216,7 @@ def ga_editable(parsed, context, token):
             return t.render(Context(context))
     return parsed
 
-@register.filter
+@register.filter(is_safe=True)
 def contact(user):
     if not user:
         return "<strong>None</strong>"
