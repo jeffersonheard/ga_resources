@@ -222,4 +222,12 @@ def contact(user):
         return "<strong>None</strong>"
     bn = best_name(user)
     email = user.email
-    return '<a href="{email}">{bn}</a>'.format(**locals())
+    return '<span class="username">{bn}</span><a href="{email}"><i class="fa fa-envelope"></i><small> (email)</small> </a>'.format(**locals())
+
+@register.filter(is_safe=True)
+def display_name(user):
+    if not user:
+        return "<strong>None</strong>"
+    bn = best_name(user)
+    email = user.email
+    return '<span class="username">{bn}</span>'.format(**locals())
