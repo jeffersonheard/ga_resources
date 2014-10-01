@@ -70,11 +70,11 @@ class ShapefileDriver(Driver):
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.dbf')))
         sh.rm('-f', sh.glob(os.path.join(self.cache_path, '*.prj')))
 
-    def compute_fields(self, **kwargs):
+    def compute_spatial_metadata(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        super(ShapefileDriver, self).compute_fields(**kwargs)
+        super(ShapefileDriver, self).compute_spatial_metadata(**kwargs)
         self.clear_cached_files()
 
         archive = ZipFile(self.cached_basename + self.src_ext)

@@ -103,11 +103,11 @@ class PostGISDriver(Driver):
             )
         return connection
 
-    def compute_fields(self, **kwargs):
+    def compute_spatial_metadata(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        super(PostGISDriver, self).compute_fields(**kwargs)
+        super(PostGISDriver, self).compute_spatial_metadata(**kwargs)
         cfg = self.resource.driver_config
         connection = self._connection()
         xmin=ymin=float('inf')

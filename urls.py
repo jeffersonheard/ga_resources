@@ -2,7 +2,6 @@ from django.conf.urls import patterns, url, include
 from ga_resources import api, views, signals
 
 urlpatterns = patterns('',
-    url(r'^api/', include(api.api.urls)),
     url(r'^wms/', views.WMS.as_view()),
     url(r'^(?P<layer>.*)/tms/(?P<z>[0-9]+)/(?P<x>[0-9]+)/(?P<y>[0-9]+)/', views.tms),
     url(r'^wfs/', views.WFS.as_view()),

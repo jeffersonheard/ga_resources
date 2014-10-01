@@ -3,20 +3,53 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from ga_ows.views import wms, wfs
 from ga_resources import models, dispatch
-from ga_resources.drivers import shapefile, render, CacheManager
+from ga_resources.drivers import shapefile
+from ga_resources.rendering import DEFAULT_RENDERER
+from ga_resources.cache import CacheManager
 from ga_resources.models import RenderedLayer
 from ga_resources.utils import authorize
 from matplotlib.finance import md5
 from osgeo import osr, ogr
 
 class WMSAdapter(wms.WMSAdapterBase):
+    def __init__(
+            self,
+            layer_cls=models.RenderedLayer,
+            style_cls=models.Style,
+            data_cls=models.DataResource,
+            layer_id_field='slug',
+            style_id_field='slug',
+            resource_id_field='slug',
+            requires_time=False,
+            requires_elevation=False,
+            requires_version=False,
+            base_path=None
+    ):
+        self.RenderedLayer=layer_cls
+        self.Style=style_cls
+        self.DataResource=data_cls
+        self.layer_id_field=layer_id_field
+        self.style_id_field=style_id_field
+        self.resource_id_field=resource_id_field
+        self.base_path=base_path
+        super(WMSAdapter, self).__init__([], requires_time, requires_elevation, requires_version)
+
     def layerlist(self):
-        return [l.slug for l in models.RenderedLayer.objects.all()]
+        if self.base_path:
+            return [
+                getattr(l, self.layer_id_field)
+                for l in self.RenderedLayer.objects.filter(**{self.layer_id_field + '__startswith': self.base_path})
+            ]
+        else:
+            return [
+                getattr(l, self.layer_id_field)
+                for l in self.RenderedLayer.objects.all()
+            ]
 
     def get_2d_dataset(self, layers, srs, bbox, width, height, styles, bgcolor, transparent, time, elevation, v, filter,
                        **kwargs):
         """use the driver to render a tile"""
-        return render(kwargs['format'], width, height, bbox, srs, styles, layers, **kwargs)
+        return DEFAULT_RENDERER.render(kwargs['format'], width, height, bbox, srs, styles, layers, **kwargs)
 
     def get_feature_info(self, wherex, wherey, layers, callback, format, feature_count, srs, filter, fuzziness=0,
                          **kwargs): # fuzziness of 30 meters by default
@@ -28,29 +61,39 @@ class WMSAdapter(wms.WMSAdapterBase):
             srs = s.ExportToProj4()
 
         feature_info = {
-            layer: models.RenderedLayer.objects.get(slug=layer).data_resource.driver_instance.get_data_for_point(
+            layer: self.RenderedLayer.objects.get(**{self.layer_id_field: layer}).data_resource.driver_instance.get_data_for_point(
                 wherex, wherey, srs, fuzziness=fuzziness, **kwargs
             )
-            for layer in layers}
+            for layer in layers
+        }
 
         return feature_info
 
     def nativesrs(self, layer):
         """Use the resource record to get native SRS"""
-        resource = models.RenderedLayer.objects.get(slug=layer).data_resource
+        resource = self.RenderedLayer.objects.get(**{self.layer_id_field: layer}).data_resource
         return resource.native_srs
 
     def nativebbox(self, layer=None):
         """Use the resource record to get the native bounding box"""
         if layer:
-            resource = models.RenderedLayer.objects.get(slug=layer).data_resource
+            resource = self.RenderedLayer.objects.get(**{self.layer_id_field: layer}).data_resource
             return resource.native_bounding_box.extent
         else:
             return (-180, -90, 180, 90)
 
     def styles(self):
         """Use the resource record to get the available styles"""
-        return list(models.Style.objects.all())
+        if self.base_path:
+            return [
+                getattr(l, self.layer_id_field)
+                for l in self.Style.objects.filter(**{self.layer_id_field + '__startswith': self.base_path})
+            ]
+        else:
+            return [
+                getattr(l, self.layer_id_field)
+                for l in self.Style.objects.all()
+            ]
 
     def get_layer_descriptions(self):
         """
@@ -77,7 +120,7 @@ class WMSAdapter(wms.WMSAdapterBase):
               "legend_url" : style_legend_url
             }
         """
-        layers = models.RenderedLayer.objects.all()
+        layers = self.layerlist()
         ret = []
         for layer in layers:
             desc = {}
@@ -119,9 +162,18 @@ class WMSAdapter(wms.WMSAdapterBase):
             "maxy": 90.0
         }
 
-class WMS(wms.WMS):
-    adapter = WMSAdapter([])
+from django.conf import settings
+from django.db.models import get_model
 
+class WMS(wms.WMS):
+    adapter = WMSAdapter(
+        layer_cls=get_model(*getattr(settings, "LAYER_MODEL", ("ga_resources", "RenderedLayer"))),
+        style_cls=get_model(*getattr(settings, "STYLE_MODEL", ("ga_resources", "Style"))),
+        data_cls=get_model(*getattr(settings, "DATARESOURCE_MODEL", ("ga_resources", "DataResource"))),
+        layer_id_field=getattr(settings, "LAYER_MODEL_ID_FIELD", "slug"),
+        style_id_field=getattr(settings, "STYLE_MODEL_ID_FIELD", "slug"),
+        resource_id_field=getattr(settings, "DATARESOURCE_MODEL_ID_FIELD", "slug")
+    )
 
 class WFSAdapter(wfs.WFSAdapter):
     def get_feature_descriptions(self, request, *types):

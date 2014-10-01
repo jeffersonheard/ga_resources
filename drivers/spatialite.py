@@ -1,4 +1,5 @@
 # from ga_ows.views import wms, wfs
+from django.utils.text import slugify
 from tarfile import TarFile
 from uuid import uuid4
 from zipfile import ZipFile
@@ -17,10 +18,13 @@ import pandas
 from pysqlite2 import dbapi2 as db
 import geojson
 import shapely
+import re
+from ga_resources.drivers import iter
+from django import dispatch
 
 
 def identity(x):
-    return '"' + x + '"' if isinstance(x, basestring) else str(x)
+    return '"' + str(x) + '"' if isinstance(x, basestring) else str(x)
 
 
 def transform(geom, crx):
@@ -34,77 +38,29 @@ class SpatialiteDriver(Driver):
     Config Parameters:
         * dbname : string (required if not use_django_dbms)
         * table : the default table to use
-        * tables : dict of layer names -> tables, must all be in the same coordinate system for now.  Can also be select queries. paired with the geometry field name.
+        * tables : dict of layer names -> tables, must all be in the same coordinate system for now.  Can also be select
+          queries. paired with the geometry field name.
         * estimate_extent : see mapnik documentation
         * srid : the native srid of the tables
     """
-    def __init__(self, data_resource):
-        super(SpatialiteDriver, self).__init__(data_resource)
-        self._conn = None # lazily open the connection
+    WEB_MERCATOR_EXTENT = [-20037508.34, -20037508.34, 20037508.34, 20037508.34]
+
+    def _layer_name(self, s):
+        s = unicode(s)
+        layer_name = os.path.split(s)[-1]
+        layer_name = re.sub('-', '_', slugify(layer_name.rsplit('.', 1)[0]))
+        return layer_name
 
 
-    def ready_data_resource(self, **kwargs):
-        slug, srs = super(SpatialiteDriver, self).ready_data_resource(**kwargs)
-        cfg = self.resource.driver_config
+    def __init__(self, data_resource, **kwargs):
+        self._conn = None  # lazily open the connection
+        self._layers = []  # the whole set of layers available from this resource
+        self._default_layer = None  # the default layer object (dict)
+        self._conn_template = None  # the template for Mapnik rendering
+        self._ready = False  # has ready_data_resource been called yet?
+        self.src_ext = 'sqlite'
 
-        connection = self._connection()
-        conn = {
-            'type': 'sqlite',
-            'file': self.get_filename('sqlite') if 'filename' not in cfg else cfg['filename'],
-            'extent': [-20037508.34, -20037508.34,
-                       20037508.34, 20037508.34], # self.resource.native_bounding_box.extent,
-            'wkb_format' : 'spatialite'
-        }
-
-        if 'table' not in cfg:
-            table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
-            geometry_field = 'GEOMETRY' if geometry_field == 'geometry' else geometry_field
-            self._tablename = table
-            self._geometry_field = geometry_field
-            srs = osr.SpatialReference()
-            srs.ImportFromEPSG(srid)
-            self._srid = srid # srs.ExportToProj4()
-        elif 'sublayer' in kwargs:
-            table, geometry_field = cfg['tables']['sublayer']
-            table = table if not table.lower().startswith('select') else '(' + table + ')'
-            srid = connection.execute(
-                "select srid({geometry_field}) from {table} limit 1".format(
-                    geometry_field=geometry_field,
-                    table = table if not table.lower().startswith('select') else '(' + table + ')',
-                )).fetchone()[0] # grab the first layer with a geometry
-
-            self._tablename = table
-            self._geometry_field = geometry_field
-            srs = osr.SpatialReference()
-            srs.ImportFromEPSG(srid)
-            self._srid = srid # srs.ExportToProj4()
-        else:
-            table, geometry_field = cfg['table']
-            table = table if not table.lower().startswith('select') else '(' + table + ')'
-            srid = connection.execute(
-                "select srid({geometry_field}) from {table} limit 1".format(
-                    geometry_field=geometry_field,
-                    table=table if not table.lower().startswith('select') else '(' + table + ')',
-                )).fetchone()[0]
-            self._tablename = table
-            self._geometry_field = geometry_field
-            srs = osr.SpatialReference()
-            srs.ImportFromEPSG(srid)
-            self._srid = srid # srs.ExportToProj4()
-
-        def addcfg(k):
-            if k in cfg:
-                conn[k] = cfg[k]
-
-        addcfg('key_field')
-        addcfg('encoding')
-
-        self._table_name = table
-        conn['table'] = table
-        self._index_name = table if 'index' not in cfg else cfg['index']
-        self._geometry_field = conn['geometry_field'] = geometry_field
-
-        return slug, srs, conn
+        super(SpatialiteDriver, self).__init__(data_resource, **kwargs)
 
     def _connection(self):
         # create a database connection, or use the
@@ -116,83 +72,142 @@ class SpatialiteDriver(Driver):
             self._conn = conn
         return self._conn
 
-    def compute_fields(self):
-        """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
-        ignores them"""
-        
-        super(SpatialiteDriver, self).compute_fields()
+    def ready_data_resource(self, **kwargs):
+        if not self._ready:
+            super(SpatialiteDriver, self).ready_data_resource(**kwargs)
+            cfg = self.resource.driver_config or {}
 
-        if not hasattr(self, "src_ext") and self.resource.resource_file :
-            self.src_ext = self.resource.resource_file.name.split('.')[-1]
-        elif not hasattr(self, 'src_ext'):
-            self.src_ext = 'sqlite'
+            connection = self._connection()
+            self._conn_template = {
+                'type': 'sqlite',
+                'file': self.get_filename('sqlite') if 'filename' not in cfg else cfg['filename'],
+                'extent': self.resource.native_bounding_box.extent,
+                'wkb_format': 'spatialite'
+            }
+            def addcfg(k):
+                if k in cfg:
+                    self._conn_template[k] = cfg[k]
 
-        # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
-        # file
-        
-        if self.src_ext.endswith('zip'):
-            archive = ZipFile(self.cached_basename + self.src_ext)
-            projection_found = False
-            for name in archive.namelist():
-                xtn = name.split('.')[-1].lower()
-                if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
-                    projection_found = projection_found or xtn == 'prj'
-                    with open(self.cached_basename + '.' + xtn, 'wb') as fout:
-                        with archive.open(name) as fin:
-                            chunk = fin.read(1024768)
-                            while chunk:
-                                fout.write(chunk)
-                                chunk = fin.read(1024768)
+            addcfg('key_field')
+            addcfg('encoding')
 
-            if not projection_found:
-                with open(self.cached_basename + '.prj', 'w') as f:
-                    srs = osr.SpatialReference()
-                    srs.ImportFromEPSG(4326)
-                    f.write(srs.ExportToWkt())
+            # introspect the database to get all the layers
+            self._layers = {
+                table: {
+                    'table': table,
+                    'geometry_column': 'GEOMETRY' if geometry_column == 'geometry' else geometry_column,
+                    'srid': srid
+                }
+                for table, geometry_column, _, _, srid, _
+                in connection.execute("select * from geometry_columns").fetchall()
+            }
 
-            in_filename = self.get_filename('shp')
-            out_filename = self.get_filename('sqlite')
-            if os.path.exists(out_filename):
-                os.unlink(out_filename)
+            # add any layers that require special selects from the config
+            self._layers.update(cfg.get('custom_layers', {}))
 
-             # ogr2ogr -skipfailures -overwrite -f SQLite -dsco USE_SPATIALITE=YES -lco OVERWRITE=YES -dsco OGR_SQLITE_SYNCHRONOUS=OFF -gt 131072 -t_srs epsg:3857             
+            # if there's more than one layer, the user can specify the name of the default
+            set_default = cfg.get('default_layer', None)
+            if set_default:
+                self._default_layer = self._layers[set_default]
+            else:
+                self._default_layer = self._layers.values()[0]
+
+            self._ready = True
+
+    def get_rendering_parameters(self, **kwargs):
+        connection = self._connection()
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(self._default_layer['srid'])
+
+        if 'sublayer' in kwargs:
+            table, geometry_field = self._layers[kwargs['sublayer']]
+            table = table if not table.lower().startswith('select') else '(' + table + ')'
+            srid = connection.execute(
+                "select srid({geometry_field}) from {table} limit 1".format(
+                    geometry_field=geometry_field,
+                    table = table if not table.lower().startswith('select') else '(' + table + ')',
+                )).fetchone()[0] # grab the first layer with a geometry
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(srid)
+        else:
+            table, geometry_field = self._layers[self._default_layer]['table']
+            table = table if not table.lower().startswith('select') else '(' + table + ')'
+            srid = connection.execute(
+                "select srid({geometry_field}) from {table} limit 1".format(
+                    geometry_field=geometry_field,
+                    table=table if not table.lower().startswith('select') else '(' + table + ')',
+                )).fetchone()[0]
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(srid)
+
+        conn = {}.update(self._conn_template)
+        conn['table'] = table
+
+        return self.id, srs, conn
+
+    @property
+    def layers(self):
+        return self._layers
+
+    def _convert_zipfile(self, source_filename):
+        # unzip file
+        # take stock of files unzipped
+        # if shapefiles exist, then look at unique base-names
+        # and create new layers in the output spatialite for each base-name
+        # and add projection files for each layer if they don't exist
+
+        def _write_shapefile_layer(layer_name, out_filename):
+            if not os.path.exists(layer_name + '.prj'):
+                with open(layer_name + '.prj', 'w') as prj:
+                    prj.write(e4326)
+
             sh.ogr2ogr(
                 '-explodecollections',
-                '-skipfailures', 
-                '-overwrite',
+                '-skipfailures',
+                '-append',
                 '-gt', '131072',
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
                 '-dsco', 'SPATIALITE=YES',
-                out_filename, in_filename
+                out_filename, self.cache_path + '/' + layer_name + '.shp'
             )
-            self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
 
-        elif self.src_ext.endswith('gz'):
-            archive = TarFile(self.cached_basename + self.src_ext)
-            projection_found = False
-            for name in archive.getnames():
-                xtn = name.split('.')[-1].lower()
-                if xtn in {'shp', 'shx', 'dbf', 'prj'} and "__MACOSX" not in name:
-                    projection_found = projection_found or xtn == 'prj'
-                    with open(self.cached_basename + '.' + xtn, 'wb') as fout:
-                        with archive.open(name) as fin:
-                            chunk = fin.read(65536)
-                            while chunk:
-                                fout.write(chunk)
-                                chunk = fin.read(65536)
+        e4326 = osr.SpatialReference()
+        e4326.ImportFromEPSG(4326)
+        e4326 = e4326.ExportToWkt()
 
-            if not projection_found:
-                with open(self.cached_basename + '.prj', 'w') as f:
-                    srs = osr.SpatialReference()
-                    srs.ImportFromEPSG(4326)
-                    f.write(srs.ExportToWkt())
+        out_filename = self.get_filename('sqlite')
+        filename = self.get_filename('zip')
+        archive = ZipFile(filename)
+        names = archive.namelist()
+        names = filter(lambda x: ('.' in x) and (not x.startswith('__MACOSX')), sorted(names))
+        extensions = {os.path.splitext(name)[-1].lower() for name in names}
 
-            in_filename = self.get_filename('shp')
-            out_filename = self.get_filename('sqlite')
-            if os.path.exists(out_filename):
-                os.unlink(out_filename)
+        layer_name = self._layer_name(sorted(names)[0])
+        if '.shp' in extensions:
+            written = []
+            for name in names:
+                xtn = os.path.splitext(name)[-1]
+                this_layer_name = self._layer_name(name)
+                if os.path.exists(self.cache_path + '/' + this_layer_name + xtn):
+                    os.unlink(self.cache_path + '/' + this_layer_name + xtn)
 
+                archive.extract(name, self.cache_path)
+                if name != (this_layer_name + xtn):
+                    sh.mv(self.cache_path + '/' + name, self.cache_path + "/" + this_layer_name + xtn)
+
+                written.append(self.cache_path + '/' + this_layer_name + xtn)
+
+                if layer_name != this_layer_name:
+                    _write_shapefile_layer(layer_name, out_filename)
+                    layer_name = this_layer_name
+            _write_shapefile_layer(layer_name, out_filename)
+            for name in written:
+                os.unlink(name)
+
+
+        else:
+            sh.unzip(filename)
             sh.ogr2ogr(
                 '-explodecollections',
                 '-skipfailures',
@@ -201,13 +216,28 @@ class SpatialiteDriver(Driver):
                 '-t_srs', 'epsg:3857',
                 '-f', 'SQLite',
                 '-dsco', 'SPATIALITE=YES',
-                out_filename, in_filename
+                out_filename, source_filename
             )
-            self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
+
+
+    def _convert_dataset(self):
+        # convert any other kind of file to spatialite.  this way the sqlite driver can be used with any OGR compatible
+        # file
+        source_file = self.resource.resource_file
+        source_filename, source_extension = os.path.splitext(source_file.name)
+        source_extension = source_extension.lower()
+
+        if source_extension.endswith('zip'):
+            self._convert_zipfile(source_filename)
+            self.resource.original_file = self.resource.resource_file
+            self.resource.resource_file = File(open(self.get_filename('sqlite')), name=self.resource.slug.split('/')[-1] + '.sqlite')
+            self.resource.save()
+
 
         elif not self.src_ext.endswith('sqlite'):
             in_filename = self.get_filename(self.src_ext)
             out_filename = self.get_filename('sqlite')
+            sh.rm('-f', out_filename)
 
             if os.path.exists(out_filename):
                 os.unlink(out_filename)
@@ -222,9 +252,27 @@ class SpatialiteDriver(Driver):
                 '-dsco', 'SPATIALITE=YES',
                 out_filename, in_filename
             )
+            self.resource.original_file = self.resource.resource_file
             self.resource.resource_file = File(open(out_filename), name=self.resource.slug.split('/')[-1] + '.sqlite')
+            self.resource.save()
 
+    def cache_data_file(self, freshen=False):
+        fresh = super(SpatialiteDriver, self).cache_data_file(freshen=freshen)
+
+        if self.resource.resource_file and self.resource.resource_file.path.endswith('sqlite') and not fresh:
+            return False
+        else:
+            self._convert_dataset()
+            return True
+
+
+    def compute_spatial_metadata(self):
+        """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
+        ignores them"""
+
+        super(SpatialiteDriver, self).compute_spatial_metadata()
         connection = self._connection()
+
         table, geometry_field, _, _, srid, _ = connection.execute("select * from geometry_columns").fetchone() # grab the first layer with a geometry
         self._srid = srid if srid else 3857
 
@@ -237,7 +285,6 @@ class SpatialiteDriver(Driver):
             geom_field=geometry_field,
             table=table
         ))
-
 
         try:
             xmin, ymin, xmax, ymax = GEOSGeometry(c.fetchone()[0]).extent
@@ -262,9 +309,7 @@ class SpatialiteDriver(Driver):
         self.resource.save()
 
     def _table(self, **kwargs):
-        if not hasattr(self, '_geometry_field'):
-            self.ready_data_resource(**kwargs)
-
+        # todo, this should accept layer as a keyword argument
         cfg = self.resource.driver_config
         if 'sublayer' in kwargs:
             table, geometry_field = cfg['tables'][kwargs['sublayer']]
@@ -306,16 +351,7 @@ class SpatialiteDriver(Driver):
             index=table if 'index' not in self.resource.driver_config else self.resource.driver_config['index'],
             geometry_field=geometry_field
         ))
-        print """
-        SELECT * FROM {table} as w WHERE ST_Intersects({geometry}, w.{geometry_field}) = 1
-	    AND w.OGC_FID in (
-             SELECT ROWID FROM SpatialIndex WHERE f_table_name = '{index}' and search_frame = {geometry})
-        """.format(
-            geometry=geometry,
-            table=table,
-            index=table if 'index' not in self.resource.driver_config else self.resource.driver_config['index'],
-            geometry_field=geometry_field
-        )
+
 
         rows = [list(r) for r in cursor.fetchall()]
         if len(rows):
@@ -367,7 +403,6 @@ class SpatialiteDriver(Driver):
         return ' '.join([key, op, value])
 
     def _cursor(self, **kwargs):
-        self.ready_data_resource()
         connection = self._connection()
         if 'big' in kwargs or (
                 self.resource.big and 'count' not in kwargs): # if we don't have control over the result size of a big resource, use a server side cursor
@@ -528,130 +563,6 @@ class SpatialiteDriver(Driver):
             self._df = df
             return self._df
 
-    def add_column(self, name, field_type):
-        c = self._cursor()
-        c.execute('alter table {table} add column {column_name} {column_type}'.format(
-            table=self._tablename,
-            column_name=name,
-            column_type=field_type
-        ))
-        c.close()
-        self._conn.commit()
-
-    def delete_row(self, key):
-        c = self._cursor()
-        c.execute('delete from {table} where ogc_fid={key}'.format(
-            table=self._tablename,
-            key=key
-        ))
-        c.close()
-        self._conn.commit()
-
-    def add_row(self, **values):
-        c = self._cursor()
-        insert_stmt = 'insert into {table} ({keys}) values ({values})'
-
-        keys = [k for k in values.keys() if k != 'srid']
-        vals = [values[key] for key in keys]
-        parms = ','.join(['?' if key != self._geometry_field else 'GeomFromText(?, {srid})'.format(srid=self._srid if "srid" not in values else values['srid']) for key in keys])
-        insert_stmt = insert_stmt.format(
-            table=self._tablename,
-            keys=','.join(keys),
-            values=parms
-        )
-        c.execute(insert_stmt, vals)
-        c.execute('SELECT max(OGC_FID) from {table}'.format(table=self._tablename))
-        new_id = c.fetchone()[0]
-        c.close()
-        self._conn.commit()
-        return self.get_row(ogc_fid=new_id, geometry_format='wkt')
-
-    def update_row(self, ogc_fid, **values):
-        c = self._cursor()
-        insert_stmt = 'update {table} set {set_clause} where OGC_FID={ogc_fid}'
-        table = self._tablename
-        if 'OGC_FID' in values:
-            del values['OGC_FID']
-
-        set_clause = ','.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else '{key}=GeomFromText(:{key}, {srid})'.format(key=key, srid=self._srid if "srid" not in values else
-        values['srid']) for key in values.keys()])
-
-        c.execute(insert_stmt.format(**locals()), values)
-        c.close()
-        self._conn.commit()
-        return self.get_row(ogc_fid=ogc_fid, geometry_format='wkt')
-
-    def get_row(self, ogc_fid, geometry_format='geojson'):
-        c = self._cursor()
-        keys = self.schema()
-        table = self._tablename
-        geometry = self._geometry_field
-
-        select = 'select * from {table} where OGC_FID={ogc_fid}'.format(**locals())
-        select2 = 'select AsBinary({geometry}) from {table} where OGC_FID={ogc_fid}'.format(**locals())
-
-        c.execute("select load_extension('libspatialite.so')")
-        values = c.execute(select).fetchone()
-        record = dict(p for p in zip(keys, c.execute(select).fetchone()) if p[0] != geometry)
-        geo = c.execute(select2).fetchone()
-        # gj = { 'type' : 'feature', 'geometry' : json.loads(geojson.dumps(wkb.loads(str(geo[0])))), 'properties' : record }
-        gj = record
-        if geometry_format.lower() == 'geojson':
-            gj[self._geometry_field] = json.loads(geojson.dumps(wkb.loads(str(geo[0]))))
-        elif geometry_format.lower() == 'wkt':
-            gj[self._geometry_field] = wkb.loads(str(geo[0])).wkt
-
-        return gj
-
-    def get_rows(self, ogc_fid_start=0, ogc_fid_end=None, limit=50, geometry_format='geojson'):
-        c = self._cursor()
-        keys = self.schema()
-        table = self._tablename
-        geometry = self._geometry_field
-
-        if ogc_fid_end:
-            select = 'select * from {table} where OGC_FID >= {ogc_fid_start} and OGC_FID <= {ogc_fid_end};'.format(**locals())
-            select2 ='select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start} and OGC_FID <= {ogc_fid_end}'.format(**locals())
-        elif limit > -1:
-            select = 'select * from {table} where OGC_FID >= {ogc_fid_start} LIMIT {limit};'.format(
-                **locals())
-            select2 = 'select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start} LIMIT {limit};'.format(
-                **locals())
-        else:
-            select = 'select * from {table} where OGC_FID >= {ogc_fid_start}'.format(**locals())
-            select2 = 'select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start}'.format(**locals())
-
-        c.execute("select load_extension('libspatialite.so')")
-        c.execute(select)
-
-        records = []
-        for row in c.fetchall():
-            records.append( dict(p for p in zip(keys, row) if p[0] != geometry) )
-
-        c.execute(select2)
-        if geometry_format.lower() == 'geojson':
-            geo = [json.loads(geojson.dumps(wkb.loads(str(g[0])))) for g in c.fetchall()]
-        elif geometry_format.lower() == 'wkt':
-            geo = [wkb.loads(str(g[0])).wkt for g in c.fetchall()]
-        else:
-            geo = [None for g in c.fetchall()]
-
-        gj = []
-        for i, record in enumerate(records):
-            record[self._geometry_field] = geo[i]
-            gj.append(record)
-            # gj.append({'type': 'feature', 'geometry': geo[i], 'properties': record})
-        return gj
-
-    def create_index(self, *fields):
-        c = self._cursor()
-        index_name = '_'.join(fields)
-        c.execute('create index {index_name} on {table} ({fields})'.format(
-            index_name=index_name,
-            table=self._tablename,
-            fields=','.join(fields)
-        ))
-
     def query(
             self,
             geometry_operator='intersects',
@@ -805,7 +716,7 @@ class SpatialiteDriver(Driver):
             owner=owner
 
         )
-        ds.resource.compute_fields()
+        ds.resource.compute_spatial_metadata()
         os.unlink(filename)
         return ds
 
@@ -815,7 +726,6 @@ class SpatialiteDriver(Driver):
         from ga_resources.models import DataResource
         from uuid import uuid4
 
-        parent_dataresource.resource.ready_data_resource()
         pconn = parent_dataresource.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
         c = pconn.cursor()
         c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid})) from {table}'.format(geom=parent_dataresource.resource._geometry_field, table=parent_dataresource.resource._table_name, srid=srid))
@@ -852,7 +762,7 @@ class SpatialiteDriver(Driver):
             in_menus=[],
             owner=owner
         )
-        ds.resource.compute_fields()
+        ds.resource.compute_spatial_metadata()
         for name,ctype in columns_definitions:
             ds.resource.add_column(name, ctype)
         os.unlink(filename)
@@ -866,7 +776,6 @@ class SpatialiteDriver(Driver):
         from ga_resources.models import DataResource
         from uuid import uuid4
 
-        parent_dataresource.resource.ready_data_resource()
         pconn = parent_dataresource.resource._connection() # FIXME assumes the spatialite driver for the parent, but much faster
         c = pconn.cursor()
         c.execute('select OGC_FID, AsBinary(Transform({geom}, {srid}), {join_field_in_existing_data}) from {table}'.format(
@@ -925,7 +834,7 @@ class SpatialiteDriver(Driver):
             in_menus=[],
             owner=owner
         )
-        ds.resource.compute_fields()
+        ds.resource.compute_spatial_metadata()
         os.unlink(filename)
         return ds
 
@@ -934,7 +843,7 @@ class SpatialiteDriver(Driver):
         from ga_resources.models import DataResource
         from django.conf import settings
         # create a new sqlite datasource
-        slug, srs, child_spec = parent_dataresource.driver_instance.ready_data_resource()
+        slug, srs, child_spec = parent_dataresource.driver_instance.get_rendering_parameters()
         filename = child_spec['file']
         new_filename = parent_dataresource.driver_instance.get_filename('sqlite').split('/')[-1]
         new_filename = settings.MEDIA_ROOT + '/' + new_filename
@@ -956,21 +865,34 @@ class SpatialiteDriver(Driver):
             owner=owner
 
         )
-        ds.driver_instance.ensure_local_file()
-        ds.driver_instance.compute_fields()
-        ds.driver_instance.ready_data_resource()
         return ds
 
 
-    def schema(self):
-        self.ready_data_resource()
-        conn = self._connection()
+driver = SpatialiteDriver
+
+
+class SpatialiteVectorDataManager(iter.VectorDataManager):
+
+
+    def _cursor(self, **kwargs):
+        connection = self.driver._connection()
+        if 'big' in kwargs or (
+                self.resource.big and 'count' not in kwargs): # if we don't have control over the result size of a big resource, use a server side cursor
+            cursor = connection.cursor('cx' + uuid4().hex)
+        else:
+            cursor = connection.cursor()
+
+        return cursor
+
+    @property
+    def field_names(self):
+        conn = self.driver._connection()
         names = [c[0] for c in conn.cursor().execute('select * from {table} limit 1'.format(table=self._tablename)).description]
         return names
 
-    def full_schema(self):
-        self.ready_data_resource()
-        conn = self._connection()
+    @property
+    def schema(self):
+        conn = self.driver._connection()
         human_names = {
             'VARCHAR': 'Text',
             'FLOAT': 'Real',
@@ -988,5 +910,135 @@ class SpatialiteDriver(Driver):
                 _, name, typename, _, _, _ in
                 conn.execute('pragma table_info({table})'.format(table=self._index_name)).fetchall()])
 
-driver = SpatialiteDriver
+    def create_index(self, table=None, *fields):
+        c = self._cursor()
+        index_name = '_'.join(fields)
+        c.execute('create index {index_name} on {table} ({fields})'.format(
+            index_name=index_name,
+            table=self._tablename,
+            fields=','.join(fields)
+        ))
 
+    def drop_index(self, table=None, *fields):
+        c = self._cursor()
+        index_name = '_'.join(fields)
+        c.execute('create index {index_name} on {table} ({fields})'.format(
+            index_name=index_name,
+            table=self._tablename,
+            fields=','.join(fields)
+        ))
+
+    def add_column(self, name, field_type, table=None):
+        c = self._cursor()
+        c.execute('alter table {table} add column {column_name} {column_type}'.format(
+            table=self._tablename,
+            column_name=name,
+            column_type=field_type
+        ))
+        c.close()
+        self._conn.commit()
+
+    def delete_feature(self, key, layer=None):
+        c = self._cursor()
+        c.execute('delete from {table} where ogc_fid={key}'.format(
+            table=self._tablename,
+            key=key
+        ))
+        c.close()
+        self._conn.commit()
+
+    def append_feature(self, layer=None, **values):
+        c = self._cursor()
+        insert_stmt = 'insert into {table} ({keys}) values ({values})'
+
+        keys = [k for k in values.keys() if k != 'srid']
+        vals = [values[key] for key in keys]
+        parms = ','.join(['?' if key != self._geometry_field else 'GeomFromText(?, {srid})'.format(srid=self._srid if "srid" not in values else values['srid']) for key in keys])
+        insert_stmt = insert_stmt.format(
+            table=self._tablename,
+            keys=','.join(keys),
+            values=parms
+        )
+        c.execute(insert_stmt, vals)
+        c.execute('SELECT max(OGC_FID) from {table}'.format(table=self._tablename))
+        new_id = c.fetchone()[0]
+        c.close()
+        self._conn.commit()
+        return self.get_row(ogc_fid=new_id, geometry_format='wkt')
+
+    def update_feature(self, ogc_fid, layer=None, **values):
+        c = self._cursor()
+        insert_stmt = 'update {table} set {set_clause} where OGC_FID={ogc_fid}'
+        table = self._tablename
+        if 'OGC_FID' in values:
+            del values['OGC_FID']
+
+        set_clause = ','.join(["{key}=:{key}".format(key=key) if key != self._geometry_field else '{key}=GeomFromText(:{key}, {srid})'.format(key=key, srid=self._srid if "srid" not in values else
+        values['srid']) for key in values.keys()])
+
+        c.execute(insert_stmt.format(**locals()), values)
+        c.close()
+        self._conn.commit()
+        return self.get_row(ogc_fid=ogc_fid, geometry_format='wkt')
+
+    def get_feature(self, ogc_fid, geometry_format='geojson'):
+        c = self._cursor()
+        keys = self.schema()
+        table = self._tablename
+        geometry = self._geometry_field
+
+        select = 'select * from {table} where OGC_FID={ogc_fid}'.format(**locals())
+        select2 = 'select AsBinary({geometry}) from {table} where OGC_FID={ogc_fid}'.format(**locals())
+
+        c.execute("select load_extension('libspatialite.so')")
+        values = c.execute(select).fetchone()
+        record = dict(p for p in zip(keys, c.execute(select).fetchone()) if p[0] != geometry)
+        geo = c.execute(select2).fetchone()
+        # gj = { 'type' : 'feature', 'geometry' : json.loads(geojson.dumps(wkb.loads(str(geo[0])))), 'properties' : record }
+        gj = record
+        if geometry_format.lower() == 'geojson':
+            gj[self._geometry_field] = json.loads(geojson.dumps(wkb.loads(str(geo[0]))))
+        elif geometry_format.lower() == 'wkt':
+            gj[self._geometry_field] = wkb.loads(str(geo[0])).wkt
+
+        return gj
+
+    def get_feature_collection(self, ogc_fid_start=0, ogc_fid_end=None, limit=50, layer=None, geometry_format='geojson'):
+        c = self._cursor()
+        keys = self.schema()
+        table = self._tablename
+        geometry = self._geometry_field
+
+        if ogc_fid_end:
+            select = 'select * from {table} where OGC_FID >= {ogc_fid_start} and OGC_FID <= {ogc_fid_end};'.format(**locals())
+            select2 ='select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start} and OGC_FID <= {ogc_fid_end}'.format(**locals())
+        elif limit > -1:
+            select = 'select * from {table} where OGC_FID >= {ogc_fid_start} LIMIT {limit};'.format(
+                **locals())
+            select2 = 'select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start} LIMIT {limit};'.format(
+                **locals())
+        else:
+            select = 'select * from {table} where OGC_FID >= {ogc_fid_start}'.format(**locals())
+            select2 = 'select AsBinary({geometry}) from {table} where OGC_FID >= {ogc_fid_start}'.format(**locals())
+
+        c.execute("select load_extension('libspatialite.so')")
+        c.execute(select)
+
+        records = []
+        for row in c.fetchall():
+            records.append( dict(p for p in zip(keys, row) if p[0] != geometry) )
+
+        c.execute(select2)
+        if geometry_format.lower() == 'geojson':
+            geo = [json.loads(geojson.dumps(wkb.loads(str(g[0])))) for g in c.fetchall()]
+        elif geometry_format.lower() == 'wkt':
+            geo = [wkb.loads(str(g[0])).wkt for g in c.fetchall()]
+        else:
+            geo = [None for g in c.fetchall()]
+
+        gj = []
+        for i, record in enumerate(records):
+            record[self._geometry_field] = geo[i]
+            gj.append(record)
+            # gj.append({'type': 'feature', 'geometry': geo[i], 'properties': record})
+        return gj

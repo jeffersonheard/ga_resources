@@ -93,11 +93,11 @@ class OGRDriver(Driver):
             return self.get_filename('')[:-1]  # omit the trailing period and assume we're using the directory (such as for MapInfo)
 
 
-    def compute_fields(self, **kwargs):
+    def compute_spatial_metadata(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        super(OGRDriver, self).compute_fields(**kwargs)
+        super(OGRDriver, self).compute_spatial_metadata(**kwargs)
 
         # if we have a zip archive, we should expand it now
         archive_filename = self.get_filename('zip')

@@ -17,7 +17,7 @@ def refresh_resource(pk):
     r = DataResource.get(pk=pk)
     try:
         r.modified()
-        r.driver_instance.compute_fields()
+        r.driver_instance.compute_spatial_metadata()
         if hasattr(r.driver_instance, 'as_dataframe'):
             k = r.dataframe # force the generationg of the canonical dataframe object
     except:
@@ -47,7 +47,7 @@ def refresh_resources():
 @task(ignore_result=True)
 def data_resource_compute_fields(pk):
     ds = DataResource.objects.get(pk=pk)
-    ds.driver_instance.compute_fields()
+    ds.driver_instance.compute_spatial_metadata()
     if hasattr(ds.driver_instance, 'as_dataframe'):
         k = ds.dataframe # force the generationg of the canonical dataframe object
 

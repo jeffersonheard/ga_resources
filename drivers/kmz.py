@@ -34,11 +34,11 @@ class KmzDriver(Driver):
             "file": self.get_filename('kmz')
         }
 
-    def compute_fields(self, **kwargs):
+    def compute_spatial_metadata(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        super(KmzDriver, self).compute_fields(**kwargs)
+        super(KmzDriver, self).compute_spatial_metadata(**kwargs)
         # archive = ZipFile(self.cached_basename + self.src_ext)
 
         srs = osr.SpatialReference()

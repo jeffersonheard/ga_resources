@@ -9,13 +9,11 @@ from django.utils.timezone import utc
 from mezzanine.pages.models import Page
 from mezzanine.core.models import RichText
 from mezzanine.conf import settings as s
-from mezzanine.pages.page_processors import processor_for
 from timedelta.fields import TimedeltaField
 import sh
 import os
 from osgeo import osr
 import importlib
-
 
 _log = getLogger('ga_resources')
 
@@ -134,22 +132,6 @@ class PagePermissionsMixin(models.Model):
     class Meta:
         abstract=True
 
-# this should be used as the page processor for anything with pagepermissionsmixin
-# page_processor_for(MyPage)(ga_resources.views.page_permissions_page_processor)
-def page_permissions_page_processor(request, page):
-    page = page.get_content_model()
-    edit_groups = page.edit_groups.all()
-    view_groups = page.view_groups.all()
-    edit_users = page.edit_users.all()
-    view_users = page.view_users.all()
-
-    return {
-        "edit_groups": edit_groups,
-        "view_groups": view_groups,
-        "edit_users": edit_users,
-        "view_users": view_users,
-    }
-
 
 class CatalogPage(Page, PagePermissionsMixin):
     """Maintains an ordered catalog of data.  These pages are rendered specially but otherwise are not special."""
@@ -204,30 +186,12 @@ def set_permissions_for_new_catalog_page(sender, instance, created, *args, **kwa
     if instance.parent and created:
         instance.copy_permissions_from_parent()
 
-@processor_for(CatalogPage)
-def catalog_page_processor(request, page):
-    viewable_children = []
-    viewable_siblings = []
-    for child in page.children.all():
-        if not hasattr(page, 'can_view') or page.can_view(request):
-            viewable_children.append(child)
-
-    if page.parent:
-        for child in page.parent.children.exclude(slug=page.slug):
-            if not hasattr(page, 'can_view') or page.can_view(request):
-                viewable_siblings.append(child)
-
-    ctx = page_permissions_page_processor(request, page)
-    ctx['viewable_children'] = viewable_children
-    ctx['viewable_siblings'] = viewable_siblings
-
-    return ctx
-
 set_permissions = post_save.connect(set_permissions_for_new_catalog_page, sender=CatalogPage, weak=False)
 
 
-class DataResource(Page, RichText, PagePermissionsMixin):
+class DataResourceMixin(models.Model):
     """Represents a file that has been uploaded to Geoanalytics for representation"""
+    original_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_file = models.FileField(upload_to='ga_resources', null=True, blank=True)
     resource_url = models.URLField(null=True, blank=True)
     resource_config = models.TextField(null=True, blank=True)
@@ -242,29 +206,26 @@ class DataResource(Page, RichText, PagePermissionsMixin):
     bounding_box = models.PolygonField(null=True, srid=4326, blank=True)
     three_d = models.BooleanField(default=False)
     native_srs = models.TextField(null=True, blank=True)
-
     driver = models.CharField(
         default='ga_resources.drivers.spatialite',
         max_length=255,
         null=False,
         blank=False,
         choices=getattr(s, 'INSTALLED_DATARESOURCE_DRIVERS', (
-            ('ga_resources.drivers.spatialite', 'Spatialite (universal)'),
+            ('ga_resources.drivers.spatialite', 'Spatialite (universal vector)'),
             ('ga_resources.drivers.shapefile', 'Shapefile'),
             ('ga_resources.drivers.geotiff', 'GeoTIFF'),
             ('ga_resources.drivers.postgis', 'PostGIS'),
             ('ga_resources.drivers.kmz', 'Google Earth KMZ'),
             ('ga_resources.drivers.ogr', 'OGR DataSource'),
         )))
-    big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
-    class Meta:
-        ordering = ['title']
+    big = models.BooleanField(default=False, help_text='Set this to be true if the dataset is more than 100MB') # causes certain drivers to optimize for datasets larger than memory
 
     @property
     def srs(self):
         if not self.native_srs:
-            self.driver_instance.compute_fields()
+            self.driver_instance.compute_spatial_metadata()
         srs = osr.SpatialReference()
         srs.ImportFromProj4(self.native_srs.encode('ascii'))
         return srs
@@ -287,7 +248,7 @@ class DataResource(Page, RichText, PagePermissionsMixin):
     def modified(self):
         self.last_refresh = datetime.datetime.utcnow().replace(tzinfo=utc)
         self.driver_instance.clear_cache()
-        
+
     @property
     def cache_path(self):
         p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
@@ -299,71 +260,14 @@ class DataResource(Page, RichText, PagePermissionsMixin):
     def driver_config(self):
         return json.loads(self.resource_config) if self.resource_config else {}
 
-
-    def can_add(self, request):
-        return PagePermissionsMixin.can_add(self, request)
-
-    def can_change(self, request):
-        return PagePermissionsMixin.can_change(self, request)
-
-    def can_delete(self, request):
-        return PagePermissionsMixin.can_delete(self, request)
+    class Meta:
+        abstract = True
 
 
-        
+class StyleMixin(models.Model):
+    class Meta:
+        abstract = True
 
-class OrderedResource(models.Model):
-    resource_group = models.ForeignKey("ResourceGroup")
-    data_resource = models.ForeignKey(DataResource)
-    ordering = models.IntegerField(default=0)
-
-class ResourceGroup(Page):
-    """Represents a group of resources, which is possibly a time series"""
-    resources = models.ManyToManyField(DataResource, blank=True, through=OrderedResource)
-    is_timeseries = models.BooleanField(default=False)
-    min_time = models.DateTimeField(null=True)
-    max_time = models.DateTimeField(null=True)
-
-class RelatedResource(Page, RichText):
-    """Represents a file that can be joined onto a vector resource"""
-    UPPERCASE = 0
-    CAPITALIZE = 1
-    LOWERCASE = 2
-
-    resource_file = models.FileField(upload_to='ga_resources')
-    foreign_resource = models.ForeignKey(DataResource)
-    foreign_key = models.CharField(max_length=64, blank=True, null=True)
-    local_key = models.CharField(max_length=64, blank=True, null=True)
-    left_index = models.BooleanField(default=False)
-    right_index = models.BooleanField(default=False)
-    how = models.CharField(max_length=8, default='left', choices=(
-        ('left','left'),
-        ('right','right'),
-        ('outer','outer'),
-        ('inner','inner'),
-    ))
-    driver = models.CharField(max_length=255,default='ga_resources.drivers.related.excel')
-    key_transform = models.IntegerField(blank=True, null=True, choices=(
-        (CAPITALIZE, "Capitalize"),
-        (LOWERCASE, "Lower case"),
-        (UPPERCASE, "Upper case")
-    ))
-
-    @property
-    def driver_instance(self):
-        if not hasattr(self, '_driver_instance'):
-            self._driver_instance = importlib.import_module(self.driver).driver(self)
-        return self._driver_instance
-
-    @property
-    def cache_path(self):
-        p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
-        if not os.path.exists(p):
-            os.makedirs(p)  # just in case it's not there yet.
-        return p
-
-class Style(Page, PagePermissionsMixin):
-    """A stylesheet in CartoCSS format."""
     legend = models.ImageField(upload_to='ga_resources.styles.legends', width_field='legend_width', height_field='legend_height', null=True, blank=True)
     legend_width = models.IntegerField(null=True, blank=True)
     legend_height = models.IntegerField(null=True, blank=True)
@@ -377,6 +281,12 @@ class Style(Page, PagePermissionsMixin):
             s.WMS_CACHE_DB.srem(self.slug, cached_filenames)
 
 
+
+
+class DataResource(Page, RichText, DataResourceMixin, PagePermissionsMixin):
+    class Meta:
+        ordering = ['title']
+
     def can_add(self, request):
         return PagePermissionsMixin.can_add(self, request)
 
@@ -388,14 +298,28 @@ class Style(Page, PagePermissionsMixin):
 
 
 
+class Style(Page, StyleMixin, PagePermissionsMixin):
+    """A stylesheet in CartoCSS format."""
+    class Meta:
+        ordering = ['title']
+
+    def can_add(self, request):
+        return PagePermissionsMixin.can_add(self, request)
+
+    def can_change(self, request):
+        return PagePermissionsMixin.can_change(self, request)
+
+    def can_delete(self, request):
+        return PagePermissionsMixin.can_delete(self, request)
+
+
 
 class RenderedLayer(Page, RichText, PagePermissionsMixin):
     """All the general stuff for a layer.  Layers inherit ownership and group info from the data resource"""
-    data_resource = models.ForeignKey(DataResource)
-    default_style = models.ForeignKey(Style, related_name='default_for_layer')
+    data_resource = models.ForeignKey(DataResource, related_name="%(app_label)s_%(class)s_layers")
+    default_style = models.ForeignKey(Style, related_name="%(app_label)s_%(class)s_is_default_for")
     default_class = models.CharField(max_length=255, default='default')
-    styles = models.ManyToManyField(Style)
-
+    styles = models.ManyToManyField(Style, related_name="%(app_label)s_%(class)s_layers") # fixme this must be a generic relation, not a many-to-many
 
     def can_add(self, request):
         return PagePermissionsMixin.can_add(self, request)

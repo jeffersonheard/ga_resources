@@ -18,7 +18,7 @@ class GeotiffDriver(Driver):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        changed = self.ensure_local_file(freshen='fresh' in kwargs and kwargs['fresh'])
+        changed = self.cache_data_file(freshen='fresh' in kwargs and kwargs['fresh'])
     
         if changed:
             ds = gdal.Open(self.cached_basename + '.tif')
@@ -51,11 +51,11 @@ class GeotiffDriver(Driver):
             "file": self.cached_basename + '.tif'
         })
 
-    def compute_fields(self, **kwargs):
+    def compute_spatial_metadata(self, **kwargs):
         """Other keyword args get passed in as a matter of course, like BBOX, time, and elevation, but this basic driver
         ignores them"""
 
-        self.ensure_local_file(True)
+        self.cache_data_file(True)
 
         ds = gdal.Open(self.cached_basename + '.tif')
         nx = ds.RasterXSize
