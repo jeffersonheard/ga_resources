@@ -5,7 +5,7 @@ functions in the module are probably the date manipulation functions.
 from collections import namedtuple
 import datetime
 import json
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User, Group, AnonymousUser
 from django.core.exceptions import ValidationError, PermissionDenied
 from django.forms import MultipleChoiceField, Field
 from django.http import HttpResponse, HttpResponseRedirect
@@ -266,6 +266,8 @@ def get_user(request):
     :return: django.contrib.auth.User
     """
     if isinstance(request, User):
+        return request
+    elif isinstance(request, AnonymousUser):
         return request
     if request is None:
         return request
