@@ -28,6 +28,9 @@ def get_user(request):
     if isinstance(request, User):
         return request
 
+    if getattr(getattr(request, 'user', None), 'is_authenticated', lambda: False)():
+        return request.user
+
     from tastypie.models import ApiKey
     if isinstance(request, basestring):
         try:
@@ -40,8 +43,6 @@ def get_user(request):
     elif 'api_key' in request.REQUEST:
         api_key = ApiKey.objects.get(key=request.REQUEST['api_key'])
         return api_key.user
-    elif request.user.is_authenticated():
-        return User.objects.get(pk=request.user.pk)
     else:
         return request.user
 
@@ -200,7 +201,7 @@ class CatalogPage(Page, PagePermissionsMixin):
         return PagePermissionsMixin.can_delete(self, request)
 
 
-def set_permissions_for_new_catalog_page(sender, instance, created, *args, **kwargs):
+def set_permissions_for_new_page(sender, instance, created, *args, **kwargs):
     if instance.parent and created:
         instance.copy_permissions_from_parent()
 
@@ -223,7 +224,7 @@ def catalog_page_processor(request, page):
 
     return ctx
 
-set_permissions = post_save.connect(set_permissions_for_new_catalog_page, sender=CatalogPage, weak=False)
+set_permissions = post_save.connect(set_permissions_for_new_page, sender=CatalogPage, weak=False)
 
 
 class DataResource(Page, RichText, PagePermissionsMixin):
