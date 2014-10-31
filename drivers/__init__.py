@@ -403,8 +403,10 @@ def prepare_wms(layers, srs, styles, bgcolor=None, transparent=True, **kwargs):
                  compile_mapfile(cached_filename, srs, styles, *layer_specs)
             os.unlink(cached_filename + ".lock")
         except sh.ErrorReturnCode_1, e:
+            os.unlink(cached_filename + ".lock")
             raise RuntimeError(str(e.stderr))
         except:
+            os.unlink(cached_filename + ".lock")
             pass
 
     return cached_filename
