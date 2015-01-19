@@ -144,10 +144,7 @@ def best_name(user):
     :param user: auth.User
     :return: first name + last name or username if the others aren't defined.
     """
-    profile = user.get_profile()
-    if profile.display_name:
-        return profile.display_name
-    elif user.first_name:
+    if user.first_name:
         return user.first_name + (' ' + user.last_name if user.last_name else '')
     elif user.email:
         address, server = user.email.split('@')
