@@ -6,6 +6,7 @@
 
     <a id="editable-toolbar-toggle" href="#">&gt;&gt;</a>
     <a id="editable-toolbar-logout" href="#">{% trans "Log out" %}</a>
+    <a id="editable-toolbar-logout" href="{% if page.id %}{% url "admin:pages_page_change" page.id %}{% endif %}">{% trans "Admin" %}</a>
 </form>
 
 <img id="editable-loading" src="{% static "mezzanine/img/loadingAnimation.gif" %}"/>

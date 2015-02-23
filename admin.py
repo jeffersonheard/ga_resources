@@ -10,6 +10,7 @@ class RenderedLayerAdminForm(ModelForm):
    styles = forms.ModelMultipleChoiceField(queryset=Style.objects.order_by('slug'))
 
    class Meta:
+      exclude = []
       model = RenderedLayer
 
 class RenderedLayerAdmin(PageAdmin):
