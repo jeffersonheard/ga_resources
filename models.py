@@ -291,7 +291,7 @@ class DataResource(Page, RichText, PagePermissionsMixin):
         
     @property
     def cache_path(self):
-        p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
+        p = os.path.join("/cache", "resources", *os.path.split(self.slug))
         if not os.path.exists(p):
             os.makedirs(p)  # just in case it's not there yet.
         return p
@@ -358,7 +358,7 @@ class RelatedResource(Page, RichText):
 
     @property
     def cache_path(self):
-        p = os.path.join(s.MEDIA_ROOT, ".cache", "resources", *os.path.split(self.slug))
+        p = os.path.join("/cache", "resources", *os.path.split(self.slug))
         if not os.path.exists(p):
             os.makedirs(p)  # just in case it's not there yet.
         return p
